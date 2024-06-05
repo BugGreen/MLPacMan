@@ -1,20 +1,9 @@
 import pygame
 import sys
 import numpy as np
-from enum import Enum
 from typing import Tuple
-from collections import namedtuple
-
-
-Point = namedtuple('Point', 'x, y')  # Point has members `x` and `y`
-
-
-class Direction(Enum):  # Set symbolic names bounded to unique values
-    RIGHT = 0
-    LEFT = 1
-    UP = 2
-    DOWN = 3
-    NO_ACTION = -1
+from ghost import Ghost
+from encoders import Point, Direction
 
 
 class PacManGame:
@@ -32,6 +21,7 @@ class PacManGame:
         self.grid = self.setup_grid()
         self.score = 0
         self.action = Direction.NO_ACTION
+        self.ghosts = [Ghost(Point(200, 200)), Ghost(Point(248, 200))]  # Example positions
 
     def setup_grid(self) -> np.ndarray:
         """
@@ -51,7 +41,10 @@ class PacManGame:
         # Add some internal walls to create a maze
         grid[1:4, 5:7] = 1
         grid[5, 5:25] = 1
-        grid[10:15, 10:18] = 1
+        grid[10:15, 10:11] = 1
+        grid[10:15, 17:18] = 1
+        grid[14:15, 10:18] = 1
+        grid[10:15, 17:18] = 1
         grid[20:25, 2:6] = 1
         grid[30:35, 22:26] = 1
         grid[20:30, 13:16] = 1
@@ -104,11 +97,20 @@ class PacManGame:
         :return: A tuple of reward earned and a boolean indicating if the game is over.
         """
         x, y = self.player_pos.x, self.player_pos.y
-        if self.grid[int(y // 16)][int(x // 16)] == 2:  # Assuming each cell is 16x16 pixels
-            self.grid[int(y // 16)][int(x // 16)] = 0
+        grid_x, grid_y = int(x // 16), int(y // 16)
+
+        # Check if Pac-Man is on a dot
+        if self.grid[grid_y][grid_x] == 2:
+            self.grid[grid_y][grid_x] = 0
             self.score += 10
-            return (10, False)  # reward, game not over
-        return (0, False)  # no reward, game continues
+            # Check if all dots are eaten
+            if np.all(self.grid != 2):
+                return (10, True)  # All dots eaten, game over
+            return (10, False)
+
+        # ToDo: Check if game-over conditions are met, e.g., collision with a ghost
+
+        return (0, False)
 
     def render(self):
         """
@@ -124,6 +126,9 @@ class PacManGame:
                     pygame.draw.circle(self.screen, (255, 255, 255), (x*16+8, y*16+8), 4)  # Dot
         # Render Pac-Man
         pygame.draw.circle(self.screen, (255, 255, 0), (self.player_pos.x + 8, self.player_pos.y + 8), 8)  # Pac-Man
+        # Render Ghosts
+        for ghost in self.ghosts:
+            pygame.draw.circle(self.screen, (255, 0, 0), (ghost.position.x, ghost.position.y), 8)
         pygame.display.flip()
 
     def close(self):
@@ -154,6 +159,10 @@ class PacManGame:
                 _, _, done = self.step(self.action)
                 if done:
                     break
+
+            for ghost in self.ghosts:
+                ghost.move(self.grid)  # Move each ghost
+
             self.render()
             self.clock.tick(20)  # Run at 60 frames per second
 
