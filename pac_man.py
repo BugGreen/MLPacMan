@@ -20,6 +20,7 @@ class PacManGame:
         self.player_pos = Point(self.w / 2, self.h / 2) # Start position of Pac-Man
         self.grid = self.setup_grid()
         self.score = 0
+        self.power_mode = False
         self.action = Direction.NO_ACTION
         self.ghosts = [Ghost(Point(200, 200)), Ghost(Point(248, 200))]  # Example positions
 
@@ -48,7 +49,10 @@ class PacManGame:
         grid[20:25, 2:6] = 1
         grid[30:35, 22:26] = 1
         grid[20:30, 13:16] = 1
-
+        # Add power pellets
+        power_pellet_positions = [(2, 3), (2, 24), (34, 3), (34, 24)]
+        for pos in power_pellet_positions:
+            grid[pos] = 3
         # Fill remaining spaces with dots
         grid[grid == 0] = 2
 
@@ -99,6 +103,14 @@ class PacManGame:
         x, y = self.player_pos.x, self.player_pos.y
         grid_x, grid_y = int(x // 16), int(y // 16)
 
+        # Check if Pac-Man is on Power Pellet
+        if self.grid[grid_y][grid_x] == 3:
+            self.grid[grid_y][grid_x] = 0
+            self.score += 50
+            self.power_mode = True  # Pac-Man can eat ghosts
+            # ToDo: Further development of the logic of the power_mode of pac-man
+            return (50, False)
+
         # Check if Pac-Man is on a dot
         if self.grid[grid_y][grid_x] == 2:
             self.grid[grid_y][grid_x] = 0
@@ -109,7 +121,6 @@ class PacManGame:
             return (10, False)
 
         # ToDo: Check if game-over conditions are met, e.g., collision with a ghost
-
         return (0, False)
 
     def render(self):
@@ -124,6 +135,8 @@ class PacManGame:
                     pygame.draw.rect(self.screen, (0, 0, 255), (x*16, y*16, 16, 16))  # Wall
                 elif self.grid[y][x] == 2:
                     pygame.draw.circle(self.screen, (255, 255, 255), (x*16+8, y*16+8), 4)  # Dot
+                elif self.grid[y][x] == 3:
+                    pygame.draw.circle(self.screen, (51, 255, 51), (x*16+8, y*16+8), 6)  # Power Pallet
         # Render Pac-Man
         pygame.draw.circle(self.screen, (255, 255, 0), (self.player_pos.x + 8, self.player_pos.y + 8), 8)  # Pac-Man
         # Render Ghosts
@@ -166,7 +179,8 @@ class PacManGame:
             self.render()
             self.clock.tick(20)  # Run at 60 frames per second
 
-    def handle_keys(self) -> Direction:
+    @staticmethod
+    def handle_keys() -> Direction:
         """
         Handle keyboard inputs and return the corresponding action.
 
