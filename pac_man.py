@@ -22,7 +22,7 @@ class PacManGame:
         self.score = 0
         self.power_mode = False
         self.action = Direction.NO_ACTION
-        self.ghosts = [Ghost(Point(200, 200)), Ghost(Point(248, 200))]  # Example positions
+        self.ghosts = [Ghost(Point(200, 200), Point(2, 3), 'Blinky'), Ghost(Point(248, 200), Point(2, 3), 'Inky')]  # Example positions
 
     def setup_grid(self) -> np.ndarray:
         """
@@ -174,7 +174,7 @@ class PacManGame:
                     break
 
             for ghost in self.ghosts:
-                ghost.move(self.grid)  # Move each ghost
+                ghost.move(self.grid, self.player_pos)  # Include Pac-Man's position
 
             self.render()
             self.clock.tick(20)  # Run at 60 frames per second

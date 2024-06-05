@@ -1,27 +1,49 @@
-from encoders import Point, Direction
+from encoders import Point, Direction, GhostMode
 import numpy as np
 import random
 
 
 class Ghost:
-    def __init__(self, position: Point, speed: int = 16):
+    def __init__(self, position: Point, target_corner: Point, name: str):
         """
-        Initialize a ghost with a given position and speed.
+        Initializes a ghost with a starting position, target corner for scatter mode, and a name.
 
         :param position: Starting position of the ghost as a Point.
-        :param speed: Speed of the ghost, default is one cell (16 pixels).
+        :param target_corner: Target Corner for scatter mode as a Point.
+        :param name: The name of the ghost for unique behavior patterns.
         """
         self.position = position
-        self.speed = speed
+        self.target_corner = target_corner
+        self.name = name
         self.direction = Direction.NO_ACTION
+        self.mode = GhostMode.CHASE  # Initial mode can be "Chase" or "Scatter"
 
-    def move(self, grid: np.ndarray):
+    def move(self, grid: np.ndarray, pac_man_pos: Point):
         """
-        Move the ghost in a random direction, avoiding walls.
+        Move the ghost based on its current mode.
 
-        :param grid: The game grid to check for walls.
-        :return: None
+        :param grid: The game grid to check for walls and paths.
+        :param pac_man_pos: Current position of Pac-Man as a Point.
         """
+        if self.mode == GhostMode.SCATTER:
+            self.target = self.target_corner
+        elif self.mode == GhostMode.CHASE:
+            if self.name == 'Blinky':
+                self.target = pac_man_pos  # Blinky chases directly Pac-Man's position
+            elif self.name == 'Pinky':
+                # Pinky targets four tiles ahead of Pac-Man in his current direction
+                self.target = Point(pac_man_pos.x + 4 * 16, pac_man_pos.y + 4 * 16)
+            elif self.name == 'Inky':
+                # Placeholder for Inky's complex behavior
+                self.target = Point(pac_man_pos.x - 2 * 16, pac_man_pos.y - 2 * 16)
+            elif self.name == 'Clyde':
+                # Clyde switches between scatter and chasing close to Pac-Man
+                if np.linalg.norm(np.array([pac_man_pos.x - self.position.x, pac_man_pos.y - self.position.y])) > 8*16:
+                    self.target = pac_man_pos
+                else:
+                    self.target = self.target_corner
+
+        # ToDo: Move towards target with pathfinding (simplified to random choice for now)
         directions = [Direction.LEFT, Direction.RIGHT, Direction.UP, Direction.DOWN]
         random.shuffle(directions)
         for direction in directions:
@@ -32,18 +54,18 @@ class Ghost:
 
     def calculate_new_position(self, direction: Direction) -> Point:
         """
-        Calculate the new position based on the current direction.
+        Calculate the new position based on the given direction.
 
         :param direction: The direction in which to move.
         :return: The new position as a Point.
         """
         x, y = self.position.x, self.position.y
         if direction == Direction.UP:
-            y -= self.speed
+            y -= 16
         elif direction == Direction.DOWN:
-            y += self.speed
+            y += 16
         elif direction == Direction.LEFT:
-            x -= self.speed
+            x -= 16
         elif direction == Direction.RIGHT:
-            x += self.speed
+            x += 16
         return Point(x, y)

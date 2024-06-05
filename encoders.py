@@ -10,3 +10,17 @@ class Direction(Enum):  # Set symbolic names bounded to unique values
     UP = 2
     DOWN = 3
     NO_ACTION = -1
+
+
+class GhostMode(Enum):
+    """
+    Symbolic names for the different AI behaviour of the ghosts.
+
+    - SCATTER: During this mode, each ghost targets a specific corner of the maze, moving away from Pac-Man to their designated home corners.
+
+    - CHASE: Ghosts actively chase Pac-Man. Each ghost has a unique way of determining the target tile relative to Pac-Man's position.
+
+    """
+    CHASE = 0
+    SCATTER = 1
+    FRIGHTENED = 2
