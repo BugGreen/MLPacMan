@@ -76,22 +76,24 @@ class PacManGame:
         """
         Take an action in the game environment and update the game state.
 
-        :param action: The action to be taken.
-        :return: A tuple of the new game state, reward, and a boolean indicating if the game is over.
+        :param action: The action to be taken, represented by the Direction enum.
+        :return: A tuple containing the new game state as a numpy array, the reward as an integer, and a boolean indicating if the game is over.
         """
-        # Movement logic
-        new_x_position, new_y_position = self.player_pos.x, self.player_pos.y
-        if action == Direction.UP:  # Up
-            new_y_position -= 16  # Move 16 pixels up
-        elif action == Direction.DOWN:  # Down
-            new_y_position += 16
-        elif action == Direction.LEFT:  # Left
-            new_x_position -= 16
-        elif action == Direction.RIGHT:  # Right
-            new_x_position += 16
+        new_x, new_y = self.player_pos.x, self.player_pos.y
+        if action == Direction.UP:
+            new_y -= 16
+        elif action == Direction.DOWN:
+            new_y += 16
+        elif action == Direction.LEFT:
+            new_x -= 16
+        elif action == Direction.RIGHT:
+            new_x += 16
 
-        self.player_pos = Point(new_x_position, new_y_position)
-        # Check for collisions or collecting dots
+        # Check if the new position is a wall
+        if 0 <= new_x < self.w and 0 <= new_y < self.h:  # Check boundaries
+            if self.grid[int(new_y // 16)][int(new_x // 16)] != 1:  # Not a wall
+                self.player_pos = Point(new_x, new_y)
+
         reward, done = self.check_collision()
         return (self.grid.copy(), reward, done)
 
@@ -121,7 +123,7 @@ class PacManGame:
                 elif self.grid[y][x] == 2:
                     pygame.draw.circle(self.screen, (255, 255, 255), (x*16+8, y*16+8), 4)  # Dot
         # Render Pac-Man
-        pygame.draw.circle(self.screen, (255, 255, 0), self.player_pos, 8)  # Pac-Man
+        pygame.draw.circle(self.screen, (255, 255, 0), (self.player_pos.x + 8, self.player_pos.y + 8), 8)  # Pac-Man
         pygame.display.flip()
 
     def close(self):
@@ -153,7 +155,7 @@ class PacManGame:
                 if done:
                     break
             self.render()
-            self.clock.tick(60)  # Run at 60 frames per second
+            self.clock.tick(20)  # Run at 60 frames per second
 
     def handle_keys(self) -> Direction:
         """
