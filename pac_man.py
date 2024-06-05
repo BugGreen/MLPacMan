@@ -9,7 +9,7 @@ from collections import namedtuple
 Point = namedtuple('Point', 'x, y')  # Point has members `x` and `y`
 
 
-class Direction(Enum): # Set symbolic names bounded to unique values
+class Direction(Enum):  # Set symbolic names bounded to unique values
     RIGHT = 0
     LEFT = 1
     UP = 2
@@ -28,10 +28,10 @@ class PacManGame:
         self.screen = pygame.display.set_mode((self.w, self.h))
         self.clock = pygame.time.Clock()
         self.running = True
-        self.initial_pos = Point(self.w / 2, self.h / 2)
-        self.player_pos = [self.initial_pos.x, self.initial_pos.y]  # Start position of Pac-Man
+        self.player_pos = Point(self.w / 2, self.h / 2) # Start position of Pac-Man
         self.grid = self.setup_grid()
         self.score = 0
+        self.action = Direction.NO_ACTION
 
     def setup_grid(self) -> np.ndarray:
         """
@@ -72,7 +72,7 @@ class PacManGame:
         self.score = 0
         return self.grid
 
-    def step(self, action: int) -> Tuple[np.ndarray, int, bool]:
+    def step(self, action: Direction) -> Tuple[np.ndarray, int, bool]:
         """
         Take an action in the game environment and update the game state.
 
@@ -80,15 +80,17 @@ class PacManGame:
         :return: A tuple of the new game state, reward, and a boolean indicating if the game is over.
         """
         # Movement logic
-        if action == 0:  # Up
-            self.player_pos[1] -= 16  # Move 16 pixels up
-        elif action == 1:  # Down
-            self.player_pos[1] += 16
-        elif action == 2:  # Left
-            self.player_pos[0] -= 16
-        elif action == 3:  # Right
-            self.player_pos[0] += 16
+        new_x_position, new_y_position = self.player_pos.x, self.player_pos.y
+        if action == Direction.UP:  # Up
+            new_y_position -= 16  # Move 16 pixels up
+        elif action == Direction.DOWN:  # Down
+            new_y_position += 16
+        elif action == Direction.LEFT:  # Left
+            new_x_position -= 16
+        elif action == Direction.RIGHT:  # Right
+            new_x_position += 16
 
+        self.player_pos = Point(new_x_position, new_y_position)
         # Check for collisions or collecting dots
         reward, done = self.check_collision()
         return (self.grid.copy(), reward, done)
@@ -99,8 +101,7 @@ class PacManGame:
 
         :return: A tuple of reward earned and a boolean indicating if the game is over.
         """
-        x, y = self.player_pos[0], self.player_pos[1]
-        print(x // 16, y //16)
+        x, y = self.player_pos.x, self.player_pos.y
         if self.grid[int(y // 16)][int(x // 16)] == 2:  # Assuming each cell is 16x16 pixels
             self.grid[int(y // 16)][int(x // 16)] = 0
             self.score += 10
@@ -141,21 +142,20 @@ class PacManGame:
                 if event.type == pygame.QUIT:
                     self.running = False
 
-            action = -1  # Default to no action
             if agent:
                 state = np.array(self.grid).flatten()  # Flatten grid for input
-                action = agent.get_action(state)  # AI determines action
+                self.action = agent.get_action(state)  # AI determines action
             else:
-                action = self.handle_keys()  # Player control
-
-            if action != -1:
-                _, _, done = self.step(action)
+                self.action = self.handle_keys()  # Player control
+                print(self.action)
+            if self.action != Direction.NO_ACTION:
+                _, _, done = self.step(self.action)
                 if done:
                     break
             self.render()
             self.clock.tick(60)  # Run at 60 frames per second
 
-    def handle_keys(self) -> int:
+    def handle_keys(self) -> Direction:
         """
         Handle keyboard inputs and return the corresponding action.
 
@@ -163,14 +163,15 @@ class PacManGame:
         """
         key = pygame.key.get_pressed()
         if key[pygame.K_UP]:
-            return 0
+            return Direction.UP
         elif key[pygame.K_DOWN]:
-            return 1
+            return Direction.DOWN
         elif key[pygame.K_LEFT]:
-            return 2
+            return Direction.LEFT
         elif key[pygame.K_RIGHT]:
-            return 3
-        return -1  # No action
+            return Direction.RIGHT
+        return Direction.NO_ACTION  # No action
+
 
 if __name__ == "__main__":
     game = PacManGame()
