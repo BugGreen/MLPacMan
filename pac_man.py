@@ -17,12 +17,12 @@ class PacManGame:
         self.screen = pygame.display.set_mode((self.w, self.h))
         self.clock = pygame.time.Clock()
         self.running = True
-        self.player_pos = Point(self.w / 2, self.h / 2) # Start position of Pac-Man
+        self.player_pos = Point(self.w / 2, self.h / 2)  # Start position of Pac-Man
         self.grid = self.setup_grid()
         self.score = 0
         self.power_mode = False
         self.action = Direction.NO_ACTION
-        self.ghosts = [Ghost(Point(200, 200), Point(2, 3), 'Blinky'), Ghost(Point(248, 200), Point(2, 3), 'Inky')]  # Example positions
+        self.ghosts = [Ghost(Point(192, 192), Point(2, 3), 'Blinky'), Ghost(Point(208, 192), Point(2, 3), 'Inky')]  # Example positions
 
     def setup_grid(self) -> np.ndarray:
         """
@@ -141,7 +141,7 @@ class PacManGame:
         pygame.draw.circle(self.screen, (255, 255, 0), (self.player_pos.x + 8, self.player_pos.y + 8), 8)  # Pac-Man
         # Render Ghosts
         for ghost in self.ghosts:
-            pygame.draw.circle(self.screen, (255, 0, 0), (ghost.position.x, ghost.position.y), 8)
+            pygame.draw.circle(self.screen, (255, 0, 0), (ghost.position.x + 8, ghost.position.y + 8), 8)
         pygame.display.flip()
 
     def close(self):
