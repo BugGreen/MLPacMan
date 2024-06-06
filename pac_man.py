@@ -28,7 +28,8 @@ class PacManGame:
                        Ghost(Point(208, 192), Point(2, 3), GhostName.PINKY),
                        Ghost(Point(208, 192), Point(2, 3), GhostName.INKY)]  # Example positions
 
-    def setup_grid(self) -> np.ndarray:
+    @staticmethod
+    def setup_grid() -> np.ndarray:
         """
         Set up the initial game grid.
 
@@ -44,7 +45,7 @@ class PacManGame:
         grid[:, -1] = 1
 
         # Add some internal walls to create a maze
-        grid[1:4, 5:7] = 1
+        grid[1:6, 5:6] = 1
         grid[5, 5:25] = 1
         grid[10:15, 10:11] = 1
         grid[10:15, 17:18] = 1
@@ -78,7 +79,8 @@ class PacManGame:
         Take an action in the game environment and update the game state.
 
         :param action: The action to be taken, represented by the Direction enum.
-        :return: A tuple containing the new game state as a numpy array, the reward as an integer, and a boolean indicating if the game is over.
+        :return: A tuple containing the new game state as a numpy array, the reward as an integer, and a boolean
+                indicating if the game is over.
         """
 
         new_x, new_y = self.player_pos.x, self.player_pos.y
@@ -199,7 +201,8 @@ class PacManGame:
 
         pygame.display.flip()
 
-    def close(self):
+    @staticmethod
+    def close():
         """
         Cleanly close the game environment.
         """

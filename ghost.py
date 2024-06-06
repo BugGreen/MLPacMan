@@ -1,6 +1,6 @@
 from encoders import Point, Direction, GhostMode, GhostName
 from queue import PriorityQueue
-import random
+from random import choice
 import numpy as np
 
 
@@ -30,7 +30,7 @@ class Ghost:
             # self.target = self.target_corner
             self.position = self.a_star_search(grid, self.position, self.target_corner)
         elif self.mode == GhostMode.FRIGHTENED:
-            self.position = self.flee_from_pacman(grid, pac_man_pos)
+            self.position = self.flee_from_pacman(grid)
         elif self.mode == GhostMode.CHASE:
             if self.name == GhostName.BLINKY:
                 self.target = pac_man_pos  # Blinky chases directly Pac-Man's position
@@ -48,46 +48,69 @@ class Ghost:
                     self.target = self.target_corner
             self.position = self.a_star_search(grid, self.position, self.target)
 
-    def flee_from_pacman(self, grid: np.ndarray, pac_man_pos: Point) -> Point:
+    def flee_from_pacman(self, grid: np.ndarray) -> Point:
         """
-        Determine the best move to flee from Pac-Man by choosing a valid move opposite to Pac-Man's direction.
+        Calculate the best move in Frightened mode, choosing randomly at intersections but avoiding reversals.
 
-        :param grid: The current game grid indicating wall positions.
-        :param pac_man_pos: Current position of Pac-Man as a Point.
-        :return: The best move as a Point to avoid Pac-Man.
-        """
-        directions = [Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT]
-        opposite_directions = []
-
-        # Evaluate each direction, prioritize moving in the opposite direction of Pac-Man
-        for direction in directions:
-            potential_move = self.calculate_new_position(direction)
-            # Prioritize opposite direction based on Pac-Man's position
-            if (direction == Direction.UP and self.position.y > pac_man_pos.y) or \
-               (direction == Direction.DOWN and self.position.y < pac_man_pos.y) or \
-               (direction == Direction.LEFT and self.position.x > pac_man_pos.x) or \
-               (direction == Direction.RIGHT and self.position.x < pac_man_pos.x):
-                opposite_directions.append(potential_move)
-
-            # Check if move is valid (not a wall and within bounds)
-            if grid[int(potential_move.y // 16)][int(potential_move.x // 16)] != 1:
-                return potential_move
-
-        # If no direct opposite moves are valid, choose from other valid moves
-        if opposite_directions:
-            return random.choice(opposite_directions)
-        else:
-            # No valid moves, stay in place (can be improved with more complex logic)
-            return self.position
-
-    def calculate_new_position(self, direction: Direction) -> Point:
-        """
-        Calculate the new position based on the given direction.
-
-        :param direction: The direction in which to move.
+        :param grid: The game grid where 1 represents walls.
         :return: The new position as a Point.
         """
-        x, y = self.position.x, self.position.y
+        possible_moves = self.get_valid_moves(grid, self.position)
+        if possible_moves:
+            return choice(possible_moves)  # Randomly choose from valid moves
+        return self.position  # No valid move found; stay in place
+
+    def get_valid_moves(self, grid: np.ndarray, current_position: Point) -> list:
+        """
+        Determine valid movement options from the current position, excluding the direct reversal of the last move.
+
+        :param grid: The game grid.
+        :param current_position: The current position from which to find moves.
+        :return: A list of valid Points for movement.
+        """
+        directions = [
+            Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT
+        ]
+        reverse_direction = self.get_reverse_direction(self.direction)
+        valid_moves = []
+
+        for direction in directions:
+            if direction != reverse_direction:  # Prevent moving back in the same way it came
+                new_position = self.calculate_new_position(direction, current_position)
+                if 0 <= new_position.x < grid.shape[1] * 16 and 0 <= new_position.y < grid.shape[0] * 16:
+                    if grid[int(new_position.y // 16)][int(new_position.x // 16)] != 1:  # Check not a wall
+                        valid_moves.append(new_position)
+
+        return valid_moves
+
+    @staticmethod
+    def get_reverse_direction(direction: Direction) -> Direction:
+        """
+        Get the opposite direction to the current movement direction.
+
+        :param direction: The current movement direction.
+        :return: The reverse movement direction.
+        """
+        if direction == Direction.UP:
+            return Direction.DOWN
+        elif direction == Direction.DOWN:
+            return Direction.UP
+        elif direction == Direction.LEFT:
+            return Direction.RIGHT
+        elif direction == Direction.RIGHT:
+            return Direction.LEFT
+        return Direction.NO_ACTION  # If no action or undefined, no reverse exists
+
+    @staticmethod
+    def calculate_new_position(direction: Direction, current_position: Point) -> Point:
+        """
+        Calculate the new position based on the direction of movement.
+
+        :param direction: The direction to move.
+        :param current_position: The current position of the ghost.
+        :return: The new position as a Point.
+        """
+        x, y = current_position.x, current_position.y
         if direction == Direction.UP:
             y -= 16
         elif direction == Direction.DOWN:
