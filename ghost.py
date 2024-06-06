@@ -1,11 +1,11 @@
-from encoders import Point, Direction, GhostMode
+from encoders import Point, Direction, GhostMode, GhostName
 from queue import PriorityQueue
-import numpy as np
 import random
+import numpy as np
 
 
 class Ghost:
-    def __init__(self, position: Point, target_corner: Point, name: str):
+    def __init__(self, position: Point, target_corner: Point, name: GhostName):
         """
         Initializes a ghost with a starting position, target corner for scatter mode, and a name.
 
@@ -29,22 +29,56 @@ class Ghost:
         if self.mode == GhostMode.SCATTER:
             # self.target = self.target_corner
             self.position = self.a_star_search(grid, self.position, self.target_corner)
+        elif self.mode == GhostMode.FRIGHTENED:
+            self.position = self.flee_from_pacman(grid, pac_man_pos)
         elif self.mode == GhostMode.CHASE:
-            if self.name == 'Blinky':
+            if self.name == GhostName.BLINKY:
                 self.target = pac_man_pos  # Blinky chases directly Pac-Man's position
-            elif self.name == 'Pinky':
+            elif self.name == GhostName.PINKY:
                 # Pinky targets four tiles ahead of Pac-Man in his current direction
                 self.target = Point(pac_man_pos.x + 4 * 16, pac_man_pos.y + 4 * 16)
-            elif self.name == 'Inky':
+            elif self.name == GhostName.INKY:
                 # Placeholder for Inky's complex behavior
                 self.target = Point(pac_man_pos.x - 2 * 16, pac_man_pos.y - 2 * 16)
-            elif self.name == 'Clyde':
+            elif self.name == GhostName.CLYDE:
                 # Clyde switches between scatter and chasing close to Pac-Man
                 if np.linalg.norm(np.array([pac_man_pos.x - self.position.x, pac_man_pos.y - self.position.y])) > 8*16:
                     self.target = pac_man_pos
                 else:
                     self.target = self.target_corner
             self.position = self.a_star_search(grid, self.position, self.target)
+
+    def flee_from_pacman(self, grid: np.ndarray, pac_man_pos: Point) -> Point:
+        """
+        Determine the best move to flee from Pac-Man by choosing a valid move opposite to Pac-Man's direction.
+
+        :param grid: The current game grid indicating wall positions.
+        :param pac_man_pos: Current position of Pac-Man as a Point.
+        :return: The best move as a Point to avoid Pac-Man.
+        """
+        directions = [Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT]
+        opposite_directions = []
+
+        # Evaluate each direction, prioritize moving in the opposite direction of Pac-Man
+        for direction in directions:
+            potential_move = self.calculate_new_position(direction)
+            # Prioritize opposite direction based on Pac-Man's position
+            if (direction == Direction.UP and self.position.y > pac_man_pos.y) or \
+               (direction == Direction.DOWN and self.position.y < pac_man_pos.y) or \
+               (direction == Direction.LEFT and self.position.x > pac_man_pos.x) or \
+               (direction == Direction.RIGHT and self.position.x < pac_man_pos.x):
+                opposite_directions.append(potential_move)
+
+            # Check if move is valid (not a wall and within bounds)
+            if grid[int(potential_move.y // 16)][int(potential_move.x // 16)] != 1:
+                return potential_move
+
+        # If no direct opposite moves are valid, choose from other valid moves
+        if opposite_directions:
+            return random.choice(opposite_directions)
+        else:
+            # No valid moves, stay in place (can be improved with more complex logic)
+            return self.position
 
     def calculate_new_position(self, direction: Direction) -> Point:
         """
@@ -101,7 +135,6 @@ class Ghost:
                     f_score[neighbor] = tentative_g_score + self.heuristic(neighbor, end)
                     open_set.put((f_score[neighbor], neighbor))
 
-        print("No path found from", start, "to", end)
         return start  # Return start as a fallback if no path is found
 
     @staticmethod
@@ -137,7 +170,7 @@ class Ghost:
     def reconstruct_path(came_from: dict, current: Point) -> list:
         """
         Reconstruct the path from start to end by following came_from links.
-        Handles cases where the path might not be extendable beyond the starting point.
+        Handle cases where the path might not be extendable beyond the starting point.
 
         :param came_from: The dictionary containing node connections.
         :param current: The current node to trace back from.
@@ -147,9 +180,6 @@ class Ghost:
         while current in came_from:
             current = came_from[current]
             total_path.insert(0, current)
-
-        # Debug output
-        print("Reconstructed path:", total_path)
 
         return total_path
 

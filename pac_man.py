@@ -3,7 +3,7 @@ import sys
 import numpy as np
 from typing import Tuple
 from ghost import Ghost
-from encoders import Point, Direction
+from encoders import *
 
 
 class PacManGame:
@@ -22,7 +22,11 @@ class PacManGame:
         self.score = 0
         self.power_mode = False
         self.action = Direction.NO_ACTION
-        self.ghosts = [Ghost(Point(192, 192), Point(2, 3), 'Blinky'), Ghost(Point(208, 192), Point(2, 3), 'Inky')]  # Example positions
+        self.power_mode_timer = 0
+        self.ghosts = [Ghost(Point(192, 192), Point(2, 3), GhostName.BLINKY),
+                       Ghost(Point(192, 192), Point(2, 3), GhostName.CLYDE),
+                       Ghost(Point(208, 192), Point(2, 3), GhostName.PINKY),
+                       Ghost(Point(208, 192), Point(2, 3), GhostName.INKY)]  # Example positions
 
     def setup_grid(self) -> np.ndarray:
         """
@@ -76,7 +80,9 @@ class PacManGame:
         :param action: The action to be taken, represented by the Direction enum.
         :return: A tuple containing the new game state as a numpy array, the reward as an integer, and a boolean indicating if the game is over.
         """
+
         new_x, new_y = self.player_pos.x, self.player_pos.y
+
         if action == Direction.UP:
             new_y -= 16
         elif action == Direction.DOWN:
@@ -94,6 +100,18 @@ class PacManGame:
         reward, done = self.check_collision()
         return (self.grid.copy(), reward, done)
 
+    def update_power_mode(self):
+        """
+        Update the power mode timer and turn off power mode if the timer expires.
+        """
+        if self.power_mode:
+            if self.power_mode_timer > 0:
+                self.power_mode_timer -= 1
+            else:
+                self.power_mode = False
+                for ghost in self.ghosts:
+                    ghost.mode = GhostMode.CHASE  # Reset ghosts to chase mode
+
     def check_collision(self) -> Tuple[int, bool]:
         """
         Check for collisions with walls or dots and update the score.
@@ -107,8 +125,10 @@ class PacManGame:
         if self.grid[grid_y][grid_x] == 3:
             self.grid[grid_y][grid_x] = 0
             self.score += 50
-            self.power_mode = True  # Pac-Man can eat ghosts
-            # ToDo: Further development of the logic of the power_mode of pac-man
+            self.power_mode = True
+            self.power_mode_timer = 300  # e.g., 300 ticks of power mode
+            for ghost in self.ghosts:
+                ghost.mode = GhostMode.FRIGHTENED
             return (50, False)
 
         # Check if Pac-Man is on a dot
@@ -123,25 +143,60 @@ class PacManGame:
         # ToDo: Check if game-over conditions are met, e.g., collision with a ghost
         return (0, False)
 
+    def define_ghost_color(self, ghost: Ghost) -> Tuple[int]:
+        """
+        Set the ghost color based on the original PacMan game and power_mode.
+
+        :param ghost: Ghost object to identify
+        :return: RGB encoding of the ghost color
+        """
+        # Visual cues for power mode
+        if self.power_mode:
+            ghost_color = (0, 255, 255)  # Cyan for frightened ghosts
+        else:
+            if ghost.name == GhostName.BLINKY:
+                ghost_color = RED
+            elif ghost.name == GhostName.PINKY:
+                ghost_color = LAVENDER
+            elif ghost.name == GhostName.INKY:
+                ghost_color = AQUA
+            elif ghost.name == GhostName.CLYDE:
+                ghost_color = ORANGE
+
+        return ghost_color
+
     def render(self):
         """
-        Render one frame of the game.
+        Render one frame of the game, including all visual elements and power mode indicators.
         """
         self.screen.fill((0, 0, 0))  # Clear screen with black
-        # Render grid
+
+        # Visual cues for power mode
+        if self.power_mode:
+            background_color = (0, 0, 64)  # Dark blue to indicate power mode
+        else:
+            background_color = (0, 0, 0)  # Standard black background
+
+        self.screen.fill(background_color)
+
+        # Render grid, Pac-Man, ghosts, and pellets
         for y in range(self.grid.shape[0]):
             for x in range(self.grid.shape[1]):
                 if self.grid[y][x] == 1:
-                    pygame.draw.rect(self.screen, (0, 0, 255), (x*16, y*16, 16, 16))  # Wall
+                    pygame.draw.rect(self.screen, (0, 0, 255), (x * 16, y * 16, 16, 16))  # Wall
                 elif self.grid[y][x] == 2:
-                    pygame.draw.circle(self.screen, (255, 255, 255), (x*16+8, y*16+8), 4)  # Dot
+                    pygame.draw.circle(self.screen, (255, 255, 255), (x * 16 + 8, y * 16 + 8), 4)  # Dot
                 elif self.grid[y][x] == 3:
-                    pygame.draw.circle(self.screen, (51, 255, 51), (x*16+8, y*16+8), 6)  # Power Pallet
-        # Render Pac-Man
+                    pygame.draw.circle(self.screen, (51, 255, 51), (x * 16 + 8, y * 16 + 8), 6)  # Power Pellet
+
+        # Pac-Man
         pygame.draw.circle(self.screen, (255, 255, 0), (self.player_pos.x + 8, self.player_pos.y + 8), 8)  # Pac-Man
-        # Render Ghosts
+
+        # Ghosts
         for ghost in self.ghosts:
-            pygame.draw.circle(self.screen, (255, 0, 0), (ghost.position.x + 8, ghost.position.y + 8), 8)
+            ghost_color = self.define_ghost_color(ghost)
+            pygame.draw.circle(self.screen, ghost_color, (ghost.position.x + 8, ghost.position.y + 8), 8)
+
         pygame.display.flip()
 
     def close(self):
@@ -161,7 +216,7 @@ class PacManGame:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
-
+            self.update_power_mode()
             if agent:
                 state = np.array(self.grid).flatten()  # Flatten grid for input
                 self.action = agent.get_action(state)  # AI determines action
