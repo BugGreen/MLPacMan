@@ -13,11 +13,42 @@ class Ghost:
         :param target_corner: Target Corner for scatter mode as a Point.
         :param name: The name of the ghost for unique behavior patterns.
         """
+        self.initial_position = position
         self.position = position
         self.target_corner = target_corner
         self.name = name
         self.direction = Direction.NO_ACTION
-        self.mode = GhostMode.CHASE  # Initial mode can be "Chase" or "Scatter"
+        self.mode = GhostMode.CHASE
+        self.is_eaten = False
+        self.respawn_timer = 0
+
+    def eaten(self):
+        """
+        Handle the ghost's behavior when it is eaten by Pac-Man during power mode.
+        Set the respawn timer to initiate the respawn countdown.
+        """
+        self.is_eaten = True
+        self.mode = GhostMode.RESPAWNING
+        self.respawn_timer = 10
+
+    def update(self):
+        """
+        Update the ghost's state each game tick. Handle the countdown and respawn.
+        """
+        if self.mode == GhostMode.RESPAWNING:
+            if self.respawn_timer > 0:
+                self.respawn_timer -= 1
+            else:
+                self.respawn()
+
+    def respawn(self):
+        """
+        Respawn the ghost after the respawn timer expires, resetting its state and position.
+        """
+        self.is_eaten = False
+        self.mode = GhostMode.SCATTER
+        # ToDo: Make the movable after respawn method is called even if power_mode is set to True
+        self.position = self.initial_position  # Respawn at the initial position
 
     def move(self, grid: np.ndarray, pac_man_pos: Point):
         """

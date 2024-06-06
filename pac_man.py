@@ -123,6 +123,17 @@ class PacManGame:
         x, y = self.player_pos.x, self.player_pos.y
         grid_x, grid_y = int(x // 16), int(y // 16)
 
+        # Interaction with ghosts
+        for ghost in self.ghosts:
+            if (ghost.position.x, ghost.position.y) == (x, y):
+                if self.power_mode and not ghost.is_eaten:
+                    ghost.eaten()
+                    self.score += 200  # Award points for eating a ghost
+                    return (200, False)
+                elif not self.power_mode:
+                    return (0, True)  # Game over if Pac-Man collides with a ghost while not in power mode
+
+
         # Check if Pac-Man is on Power Pellet
         if self.grid[grid_y][grid_x] == 3:
             self.grid[grid_y][grid_x] = 0
@@ -143,6 +154,7 @@ class PacManGame:
             return (10, False)
 
         # ToDo: Check if game-over conditions are met, e.g., collision with a ghost
+
         return (0, False)
 
     def define_ghost_color(self, ghost: Ghost) -> Tuple[int]:
@@ -196,9 +208,11 @@ class PacManGame:
 
         # Ghosts
         for ghost in self.ghosts:
-            ghost_color = self.define_ghost_color(ghost)
+            if ghost.is_eaten:
+                ghost_color = (128, 128, 128)  # Grey color to indicate the ghost is eaten
+            else:
+                ghost_color = self.define_ghost_color(ghost)
             pygame.draw.circle(self.screen, ghost_color, (ghost.position.x + 8, ghost.position.y + 8), 8)
-
         pygame.display.flip()
 
     @staticmethod
@@ -219,19 +233,21 @@ class PacManGame:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+
             self.update_power_mode()
+
             if agent:
                 state = np.array(self.grid).flatten()  # Flatten grid for input
                 self.action = agent.get_action(state)  # AI determines action
             else:
                 self.action = self.handle_keys()  # Player control
-                print(self.action)
-            if self.action != Direction.NO_ACTION:
-                _, _, done = self.step(self.action)
-                if done:
-                    break
+
+            _, _, done = self.step(self.action)
+            if done:
+                break
 
             for ghost in self.ghosts:
+                ghost.update()
                 ghost.move(self.grid, self.player_pos)  # Include Pac-Man's position
 
             self.render()
