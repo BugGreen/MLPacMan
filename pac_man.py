@@ -24,9 +24,9 @@ class PacManGame:
         self.action = Direction.NO_ACTION
         self.power_mode_timer = 0
         self.ghosts = [Ghost(Point(192, 192), Point(2, 3), GhostName.BLINKY),
-                       Ghost(Point(192, 192), Point(2, 3), GhostName.CLYDE),
-                       Ghost(Point(208, 192), Point(2, 3), GhostName.PINKY),
-                       Ghost(Point(208, 192), Point(2, 3), GhostName.INKY)]  # Example positions
+                       Ghost(Point(192, 192), Point(2, 3), GhostName.CLYDE, movement_delay=2),
+                       Ghost(Point(208, 192), Point(2, 3), GhostName.PINKY, movement_delay=2),
+                       Ghost(Point(208, 192), Point(2, 3), GhostName.INKY, movement_delay=2)]  # Example positions
 
     @staticmethod
     def setup_grid() -> np.ndarray:
@@ -44,16 +44,42 @@ class PacManGame:
         grid[:, 0] = 1
         grid[:, -1] = 1
 
-        # Add some internal walls to create a maze
-        grid[1:6, 5:6] = 1
-        grid[5, 5:25] = 1
-        grid[10:15, 10:11] = 1
-        grid[10:15, 17:18] = 1
-        grid[14:15, 10:18] = 1
-        grid[10:15, 17:18] = 1
-        grid[20:25, 2:6] = 1
-        grid[30:35, 22:26] = 1
-        grid[20:30, 13:16] = 1
+        # Outer walls
+        grid[0, :] = 1
+        grid[-1, :] = 1
+        grid[:, 0] = 1
+        grid[:, -1] = 1
+
+        # Maze internal horizontal walls
+        grid[1:3, 1:6] = 1
+        grid[1:3, 22:27] = 1
+        grid[5:7, 2:13] = 1
+        grid[5:7, 15:26] = 1
+        grid[8:10, 2:5] = 1
+        grid[8:10, 7:10] = 1
+        grid[8:10, 18:21] = 1
+        grid[8:10, 23:26] = 1
+        grid[11:12, 2:13] = 1
+        grid[11:12, 15:26] = 1
+        grid[20:22, 2:13] = 1
+        grid[20:22, 15:26] = 1
+        grid[25:27, 2:5] = 1
+        grid[25:27, 7:10] = 1
+        grid[25:27, 18:21] = 1
+        grid[25:27, 23:26] = 1
+        grid[29:31, 1:6] = 1
+        grid[29:31, 22:27] = 1
+
+        # Maze internal vertical walls
+        grid[2:4, 13:15] = 1
+        grid[7:20, 6:7] = 1
+        grid[7:20, 21:22] = 1
+        grid[22:24, 13:15] = 1
+
+        # Add tunnels (as pass-through in the grid, represented by 0s)
+        grid[17:18, 0] = 0
+        grid[17:18, 27] = 0
+
         # Add power pellets
         power_pellet_positions = [(2, 3), (2, 24), (34, 3), (34, 24)]
         for pos in power_pellet_positions:
@@ -131,7 +157,7 @@ class PacManGame:
                     self.score += 200  # Award points for eating a ghost
                     return (200, False)
                 elif not self.power_mode:
-                    return (0, True)  # Game over if Pac-Man collides with a ghost while not in power mode
+                    return (0, False)  # Game over if Pac-Man collides with a ghost while not in power mode
 
 
         # Check if Pac-Man is on Power Pellet
@@ -247,8 +273,7 @@ class PacManGame:
                 break
 
             for ghost in self.ghosts:
-                ghost.update()
-                ghost.move(self.grid, self.player_pos)  # Include Pac-Man's position
+                ghost.update(self.grid, self.player_pos)  # Update ghosts based on their movement delay
 
             self.render()
             self.clock.tick(20)  # Run at 60 frames per second

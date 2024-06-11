@@ -5,13 +5,14 @@ import numpy as np
 
 
 class Ghost:
-    def __init__(self, position: Point, target_corner: Point, name: GhostName):
+    def __init__(self, position: Point, target_corner: Point, name: GhostName, movement_delay: int = 3):
         """
         Initializes a ghost with a starting position, target corner for scatter mode, and a name.
 
         :param position: Starting position of the ghost as a Point.
         :param target_corner: Target Corner for scatter mode as a Point.
         :param name: The name of the ghost for unique behavior patterns.
+        :param movement_delay: Delay of the ghosts movement.
         """
         self.initial_position = position
         self.position = position
@@ -19,6 +20,8 @@ class Ghost:
         self.name = name
         self.direction = Direction.NO_ACTION
         self.mode = GhostMode.CHASE
+        self.movement_delay = movement_delay  # Ghosts will move once every 3 ticks
+        self.current_delay = self.movement_delay
         self.is_eaten = False
         self.respawn_timer = 0
 
@@ -31,10 +34,19 @@ class Ghost:
         self.mode = GhostMode.RESPAWNING
         self.respawn_timer = 10
 
-    def update(self):
+    def update(self, grid: np.ndarray, pac_man_pos: Point):
         """
         Update the ghost's state each game tick. Handle the countdown and respawn.
+        Update the ghost's position based on its movement delay.
+
+        :param grid: The game grid to check for walls and paths.
+        :param pac_man_pos: Current position of Pac-Man as a Point.
         """
+        if self.current_delay > 0:
+            self.current_delay -= 1
+        else:
+            self.move(grid, pac_man_pos)
+            self.current_delay = self.movement_delay  # Reset the movement delay
         if self.mode == GhostMode.RESPAWNING:
             if self.respawn_timer > 0:
                 self.respawn_timer -= 1
