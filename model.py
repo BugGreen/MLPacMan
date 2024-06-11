@@ -1,31 +1,44 @@
 import torch
 import torch.nn as nn
+import torch.optim as optim
 
 class DQN(nn.Module):
-    """
-    A deep Q-network that predicts action values.
-
-    Attributes:
-        dense1 (nn.Linear): First fully-connected layer.
-        dense2 (nn.Linear): Second fully-connected layer.
-        outputs (nn.Linear): Output layer that gives the action values.
-    """
-    def __init__(self):
+    def __init__(self, input_dim: int, output_dim: int):
         """
-        Initialize the layers of the DQN.
+        Initialize the deep Q-network.
+
+        :param input_dim: The number of input neurons, corresponding to the state size.
+        :param output_dim: The number of output neurons, corresponding to the number of actions.
         """
         super(DQN, self).__init__()
-        self.dense1 = nn.Linear(128, 128)  # Input size needs to be defined based on state dimensions
-        self.dense2 = nn.Linear(128, 256)
-        self.outputs = nn.Linear(256, 4)  # Assuming 4 actions
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Linear(256, output_dim)
+        )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass through the network.
+        Perform a forward pass through the network.
 
-        :param x: The input state to the network.
-        :return: The predicted action values.
+        :param x: The input tensor containing the state.
+        :return: The output tensor containing the Q-values for each action.
         """
-        x = torch.relu(self.dense1(x))
-        x = torch.relu(self.dense2(x))
-        return self.outputs(x)
+        return self.net(x)
+
+
+def init_model(input_dim: int, output_dim: int, learning_rate: float = 0.001) -> tuple:
+    """
+    Initialize the DQN model, optimizer, and loss function.
+
+    :param input_dim: The dimension of the input layer.
+    :param output_dim: The dimension of the output layer.
+    :param learning_rate: The learning rate for the optimizer.
+    :return: A tuple containing the model, optimizer, and loss function.
+    """
+    model = DQN(input_dim, output_dim)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    loss_fn = nn.MSELoss()
+    return model, optimizer, loss_fn
