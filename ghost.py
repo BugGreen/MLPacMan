@@ -90,6 +90,11 @@ class Ghost:
                 else:
                     self.target = self.target_corner
             self.position = self.a_star_search(grid, self.position, self.target)
+        # Adjust position for tunnel transitions
+        if self.position.x < 0:  # Exiting left side
+            self.position.x = grid.shape[1] * 16 - 16  # Wrap to the right side
+        elif self.position.x >= grid.shape[1] * 16:  # Exiting right side
+            self.position.x = 0  # Wrap to the left side
 
     def flee_from_pacman(self, grid: np.ndarray) -> Point:
         """
@@ -166,7 +171,7 @@ class Ghost:
 
     def a_star_search(self, grid: np.ndarray, start: Point, end: Point) -> Point:
         """
-        Perform A* search to find the shortest path from start to end.
+        Perform A* search to find the shortest path from start to end, considering tunnel paths.
 
         :param grid: The game grid, where 1 represents walls.
         :param start: The start position as a Point.
@@ -181,7 +186,7 @@ class Ghost:
         open_set.put((0, start))
         came_from = {}
         g_score = {start: 0}
-        f_score = {start: self.heuristic(start, end)}
+        f_score = {start: self.heuristic(grid, start, end)}
 
         while not open_set.empty():
             current = open_set.get()[1]
@@ -198,38 +203,60 @@ class Ghost:
                 if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g_score
-                    f_score[neighbor] = tentative_g_score + self.heuristic(neighbor, end)
+                    f_score[neighbor] = tentative_g_score + self.heuristic(grid, neighbor, end)
                     open_set.put((f_score[neighbor], neighbor))
 
         return start  # Return start as a fallback if no path is found
 
     @staticmethod
-    def heuristic(a: Point, b: Point) -> int:
+    def heuristic(grid: np.ndarray, a: Point, b: Point) -> int:
         """
-        Compute the Manhattan distance between two points.
+        Compute the modified Manhattan distance considering tunnel wrap-around.
 
+        :param grid: The game grid.
         :param a: First point.
         :param b: Second point.
-        :return: Manhattan distance as an int.
+        :return: Modified Manhattan distance as an int.
         """
-        return abs(a.x - b.x) + abs(a.y - b.y)
+        normal_x = abs(a.x - b.x)
+        wrapped_x = grid.shape[1] * 16 - normal_x  # Wrap-around distance
+        x_distance = min(normal_x, wrapped_x)
+
+        normal_y = abs(
+            a.y - b.y)  # Vertical wrap-around typically not needed in Pac-Man, but can be implemented similarly
+        y_distance = normal_y
+
+        return x_distance + y_distance
 
     @staticmethod
     def get_neighbors(grid: np.ndarray, node: Point) -> list:
         """
-        Get all valid neighbors for a node in the grid.
+        Get all valid neighbors for a node in the grid, including tunnel transitions.
 
         :param grid: The game grid.
         :param node: The node from which neighbors are to be found.
         :return: A list of valid neighbor points.
         """
-        directions = [Point(0, -16), Point(0, 16), Point(-16, 0), Point(16, 0)]
+        directions = [
+            (0, -16),  # Up
+            (0, 16),  # Down
+            (-16, 0),  # Left
+            (16, 0)  # Right
+        ]
         neighbors = []
-        for direction in directions:
-            neighbor = Point(node.x + direction.x, node.y + direction.y)
-            if 0 <= neighbor.x < grid.shape[1] * 16 and 0 <= neighbor.y < grid.shape[0] * 16:
-                if grid[int(neighbor.y // 16)][int(neighbor.x // 16)] != 1:  # Not a wall
-                    neighbors.append(neighbor)
+        for dx, dy in directions:
+            nx, ny = node.x + dx, node.y + dy
+
+            # Check for horizontal tunnel wrap-around
+            if nx < 0:
+                nx = grid.shape[1] * 16 - 16  # Wrap to right side
+            elif nx >= grid.shape[1] * 16:
+                nx = 0  # Wrap to left side
+
+            # Ensure the move is within vertical bounds and not into walls
+            if 0 <= ny < grid.shape[0] * 16 and grid[int(ny // 16)][int(nx // 16)] != 1:
+                neighbors.append(Point(nx, ny))
+
         return neighbors
 
     @staticmethod

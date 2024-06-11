@@ -102,13 +102,11 @@ class PacManGame:
 
     def step(self, action: Direction) -> Tuple[np.ndarray, int, bool]:
         """
-        Take an action in the game environment and update the game state.
+        Take an action in the game environment, update the game state, and handle tunnel transitions.
 
         :param action: The action to be taken, represented by the Direction enum.
-        :return: A tuple containing the new game state as a numpy array, the reward as an integer, and a boolean
-                indicating if the game is over.
+        :return: A tuple containing the new game state as a numpy array, the reward as an integer, and a boolean indicating if the game is over.
         """
-
         new_x, new_y = self.player_pos.x, self.player_pos.y
 
         if action == Direction.UP:
@@ -120,10 +118,15 @@ class PacManGame:
         elif action == Direction.RIGHT:
             new_x += 16
 
+        # Handle tunnel transitions
+        if new_x < 0:  # Exiting left side
+            new_x = self.w - 16  # Wrap to the right side
+        elif new_x >= self.w:  # Exiting right side
+            new_x = 0  # Wrap to the left side
+
         # Check if the new position is a wall
-        if 0 <= new_x < self.w and 0 <= new_y < self.h:  # Check boundaries
-            if self.grid[int(new_y // 16)][int(new_x // 16)] != 1:  # Not a wall
-                self.player_pos = Point(new_x, new_y)
+        if not self.grid[int(new_y // 16)][int(new_x // 16)] == 1:  # Not a wall
+            self.player_pos = Point(new_x, new_y)
 
         reward, done = self.check_collision()
         return (self.grid.copy(), reward, done)
