@@ -4,20 +4,25 @@ import numpy as np
 from typing import Tuple
 from ghost import Ghost
 from encoders import *
+from agent import PacmanAgent
+from model import init_model
+import torch
 
 
 class PacManGame:
-    def __init__(self, w: int = 448, h: int = 576):
+    def __init__(self, w: int = 448, h: int = 576, enable_ai: bool = True):
         """
         Initializes the game environment, setting up the screen, clock, and initial game state.
+        Enables AI agent if specified.
         """
         pygame.init()
-        self.w = w
-        self.h = h
+        self.w, self.h = w, h
         self.screen = pygame.display.set_mode((self.w, self.h))
+        pygame.display.set_caption('MLPacMan')
         self.clock = pygame.time.Clock()
         self.running = True
-        self.player_pos = Point(self.w / 2, self.h / 2)  # Start position of Pac-Man
+        self.enable_ai = enable_ai
+        self.player_pos = Point(self.w / 2, self.h / 2)
         self.grid = self.setup_grid()
         self.score = 0
         self.power_mode = False
@@ -26,7 +31,14 @@ class PacManGame:
         self.ghosts = [Ghost(Point(192, 192), Point(2, 3), GhostName.BLINKY),
                        Ghost(Point(192, 192), Point(2, 3), GhostName.CLYDE, movement_delay=2),
                        Ghost(Point(208, 192), Point(2, 3), GhostName.PINKY, movement_delay=2),
-                       Ghost(Point(208, 192), Point(2, 3), GhostName.INKY, movement_delay=2)]  # Example positions
+                       Ghost(Point(208, 192), Point(2, 3), GhostName.INKY, movement_delay=2)]
+
+        # Initialize AI Agent if enabled
+        if self.enable_ai:
+            input_dim = np.prod(self.grid.shape)  # Assuming a flattened grid as input
+            output_dim = 4  # Four possible actions: UP, DOWN, LEFT, RIGHT
+            self.model, self.optimizer, self.loss_fn = init_model(input_dim, output_dim)
+            self.agent = PacmanAgent(self.model, self.optimizer, self.loss_fn, output_dim)
 
     @staticmethod
     def setup_grid() -> np.ndarray:
@@ -91,13 +103,21 @@ class PacManGame:
 
     def reset(self) -> np.ndarray:
         """
-        Reset the game to a starting state.
+        Reset the game to a starting state, including all relevant states and positions.
 
         :return: The initial state of the game grid.
         """
-        self.player_pos = [self.initial_pos.x, self.initial_pos.y]
+        # Reset player position to the center or a predefined starting point
+        self.player_pos = Point(self.w / 2, self.h / 2)
         self.grid = self.setup_grid()
         self.score = 0
+        self.power_mode = False
+        self.power_mode_timer = 0
+
+        # Reset all ghosts to their initial positions and states
+        for ghost in self.ghosts:
+            ghost.reset()
+
         return self.grid
 
     def step(self, action: Direction) -> Tuple[np.ndarray, int, bool]:
@@ -160,7 +180,7 @@ class PacManGame:
                     self.score += 200  # Award points for eating a ghost
                     return (200, False)
                 elif not self.power_mode:
-                    return (0, False)  # Game over if Pac-Man collides with a ghost while not in power mode
+                    return (0, True)  # Game over if Pac-Man collides with a ghost while not in power mode
 
 
         # Check if Pac-Man is on Power Pellet
@@ -252,12 +272,22 @@ class PacManGame:
         pygame.quit()
         sys.exit()
 
-    def run(self, agent=None):
-        """
-        Run the main game loop, handling either agent-driven or player-driven game play.
+    @staticmethod
+    def map_action_to_direction(action: int) -> Direction:
+        """ Maps integer actions to the corresponding Direction enums. """
+        mapping = {
+            0: Direction.RIGHT,
+            1: Direction.LEFT,
+            2: Direction.UP,
+            3: Direction.DOWN
+        }
+        return mapping.get(action, Direction.NO_ACTION)  # Default to NO_ACTION if out of range
 
-        :param agent: Optional, an instance of Agent to control Pac-Man's movements.
+    def run(self):
         """
+        Main game loop. Handles both AI-driven and manual game play based on the enable_ai flag.
+        """
+        state = np.array(self.grid).flatten()  # Flatten grid for input to AI
         while self.running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -265,21 +295,25 @@ class PacManGame:
 
             self.update_power_mode()
 
-            if agent:
-                state = np.array(self.grid).flatten()  # Flatten grid for input
-                self.action = agent.get_action(state)  # AI determines action
+            if self.enable_ai:
+                state = np.array(self.grid).flatten()  # Make sure this is done every time state is updated
+                state = torch.from_numpy(state).float().unsqueeze(0)  # Adding batch dimension
+                action = self.agent.select_action(state)
+                print(f"Action chosen by AI: {self.map_action_to_direction(action.item())}")  # Log the action chosen by AI
+                next_state, reward, done = self.step(self.map_action_to_direction(action.item()))
+                self.agent.remember(state, action, next_state, reward)  # Store the transition in memory
+                self.agent.optimize_model(32)  # Perform one step of the optimization (on the target network)
             else:
-                self.action = self.handle_keys()  # Player control
+                action = self.handle_keys()
+                next_state, reward, done = self.step(action)
 
-            _, _, done = self.step(self.action)
-            if done:
-                break
+            state = next_state if not done else self.reset()
 
             for ghost in self.ghosts:
                 ghost.update(self.grid, self.player_pos)  # Update ghosts based on their movement delay
 
             self.render()
-            self.clock.tick(20)  # Run at 60 frames per second
+            self.clock.tick(20)  # Maintain 20 FPS
 
     @staticmethod
     def handle_keys() -> Direction:

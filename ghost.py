@@ -208,6 +208,16 @@ class Ghost:
 
         return start  # Return start as a fallback if no path is found
 
+    def reset(self):
+        """
+        Reset the ghost to its initial state and position.
+        """
+        self.position = self.initial_position  # Reset position to the initial
+        self.is_eaten = False
+        self.mode = GhostMode.CHASE  # Reset mode to initial state, typically CHASE
+        self.current_delay = self.movement_delay  # Reset any counters or delays
+
+
     @staticmethod
     def heuristic(grid: np.ndarray, a: Point, b: Point) -> int:
         """

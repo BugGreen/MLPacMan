@@ -6,7 +6,8 @@ from collections import deque
 from typing import List, Tuple
 
 class PacmanAgent:
-    def __init__(self, model: nn.Module, optimizer: torch.optim.Optimizer, loss_fn: torch.nn.modules.loss, action_space: int, eps_start: float = 0.9, eps_end: float = 0.05, eps_decay: int = 200):
+    def __init__(self, model: nn.Module, optimizer: torch.optim.Optimizer, loss_fn: nn.modules.loss,
+                 action_space: int, eps_start: float = 0.9, eps_end: float = 0.05, eps_decay: int = 200):
         """
         Initialize the PacmanAgent with a model, optimizer, and specified parameters.
 
@@ -36,6 +37,7 @@ class PacmanAgent:
         :return: The action to take.
         """
         sample = random.random()
+        # eps_threshold determines the probability with which the agent will either explore or exploit
         eps_threshold = self.eps_end + (self.epsilon - self.eps_end) * \
                         np.exp(-1. * self.steps_done / self.eps_decay)
         self.steps_done += 1
