@@ -10,7 +10,7 @@ import torch
 
 
 class PacManGame:
-    def __init__(self, w: int = 448, h: int = 576, enable_ai: bool = True):
+    def __init__(self, w: int = 448, h: int = 576, enable_ai: bool = False):
         """
         Initializes the game environment, setting up the screen, clock, and initial game state.
         Enables AI agent if specified.
@@ -22,7 +22,7 @@ class PacManGame:
         self.clock = pygame.time.Clock()
         self.running = True
         self.enable_ai = enable_ai
-        self.player_pos = Point(self.w / 2, self.h / 2)
+        self.player_pos = Point(self.w / 2, (self.h / 2) + 96)
         self.grid = self.setup_grid()
         self.score = 0
         self.consecutive_dots_eaten = 0  # Track consecutive dots eaten for efficiency bonus
@@ -44,61 +44,68 @@ class PacManGame:
     @staticmethod
     def setup_grid() -> np.ndarray:
         """
-        Set up the initial game grid.
+        Set up the initial game grid using a multiline string for easy visual editing.
+        Each character represents a different type of cell:
+        ' ' (space) for paths,
+        'X' for walls,
+        'P' for power pellets,
+        'T' for tunnel entries.
 
         :return: A numpy array representing the game grid.
         """
-        # Create an empty grid with 0s (paths) initially
+        grid_map = """
+        XXXXXXXXXXXXXXXXXXXXXXXXXXXX
+        XP           XX           PX
+        X  XXX XXXX  XX  XXXX XXX  X
+        X  XXX XXXX  XX  XXXX XXX  X
+        X                          X
+        X  XXX X XXXXXXXXXX X XXX  X
+        X      X     XX     X      X
+        XXXXXX XXXXX XX XXXXX XXXXXX
+        TTTTTX X            X XTTTTT
+        TTTTTX X XXXXTTXXXX X XTTTTT
+        XXXXXX   XTTTTTTTTX   XXXXXX
+        T      X XTTTTTTTTX X      T
+        XXXXXX X XXXXXXXXXX X XXXXXX
+        TTTTTX X            X XTTTTT
+        TTTTTX X XXXXXXXXXX X XTTTTT
+        XXXXXX       XX       XXXXXX
+        X      XXXXX XX XXXXX      X
+        X XXXX       XX       XXXX X
+        X    X XXXXX XX XXXXX X    X
+        XX X X                X X XX
+        TX X   XXXXXXXXXXXXXX   X XT
+        XX XXX XXXXXXXXXXXXXX XXX XX
+        X                          X
+        X XXXX XXXX XXXXX XXX XXXX X
+        X XXXX X    X X X X   XXXX X
+        X XXXX X    X X X XXX XXXX X
+        X XXXX X    X X X   X XXXX X
+        X XXXX XXXX X X X XXX XXXX X
+        X                          X
+        XX XX XXXXX XXXX XXXXX XX XX
+        X  PX X      XX      X XP  X
+        X            XX            X
+        X  XXX XXXX  XX  XXXX XXX  X
+        X  XXX XXXX  XX  XXXX XXX  X
+        X                          X
+        XXXXXXXXXXXXXXXXXXXXXXXXXXXX
+        """
+
+        grid_map = grid_map.strip().split('\n')
+        grid_map = [striped_line.lstrip(' ') for striped_line in grid_map]
+        if any(len(line) != 28 for line in grid_map) or len(grid_map) != 36:
+            raise ValueError(
+                "Grid map dimensions are incorrect. Each line must be exactly 28 characters long and there must be exactly 36 lines.")
+
         grid = np.zeros((36, 28), dtype=int)
 
-        # Adding walls around the borders
-        grid[0, :] = 1
-        grid[-1, :] = 1
-        grid[:, 0] = 1
-        grid[:, -1] = 1
+        # Mapping characters to grid values
+        translate = {' ': 2, 'X': 1, 'P': 3, 'T': 0}
 
-        # Outer walls
-        grid[0, :] = 1
-        grid[-1, :] = 1
-        grid[:, 0] = 1
-        grid[:, -1] = 1
-
-        # Maze internal horizontal walls
-        grid[1:3, 1:6] = 1
-        grid[1:3, 22:27] = 1
-        grid[5:7, 2:13] = 1
-        grid[5:7, 15:26] = 1
-        grid[8:10, 2:5] = 1
-        grid[8:10, 7:10] = 1
-        grid[8:10, 18:21] = 1
-        grid[8:10, 23:26] = 1
-        grid[11:12, 2:13] = 1
-        grid[11:12, 15:26] = 1
-        grid[20:22, 2:13] = 1
-        grid[20:22, 15:26] = 1
-        grid[25:27, 2:5] = 1
-        grid[25:27, 7:10] = 1
-        grid[25:27, 18:21] = 1
-        grid[25:27, 23:26] = 1
-        grid[29:31, 1:6] = 1
-        grid[29:31, 22:27] = 1
-
-        # Maze internal vertical walls
-        grid[2:4, 13:15] = 1
-        grid[7:20, 6:7] = 1
-        grid[7:20, 21:22] = 1
-        grid[22:24, 13:15] = 1
-
-        # Add tunnels (as pass-through in the grid, represented by 0s)
-        grid[17:18, 0] = 0
-        grid[17:18, 27] = 0
-
-        # Add power pellets
-        power_pellet_positions = [(2, 3), (2, 24), (34, 3), (34, 24)]
-        for pos in power_pellet_positions:
-            grid[pos] = 3
-        # Fill remaining spaces with dots
-        grid[grid == 0] = 2
+        for y, line in enumerate(grid_map):
+            for x, char in enumerate(line):
+                grid[y, x] = translate.get(char, 2)  # Default to path if undefined
 
         return grid
 
@@ -109,7 +116,7 @@ class PacManGame:
         :return: The initial state of the game grid.
         """
         # Reset player position to the center or a predefined starting point
-        self.player_pos = Point(self.w / 2, self.h / 2)
+        self.player_pos = Point(self.w / 2, (self.h / 2) + 96)
         self.grid = self.setup_grid()
         self.score = 0
         self.power_mode = False
