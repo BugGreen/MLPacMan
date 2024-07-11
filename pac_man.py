@@ -25,6 +25,7 @@ class PacManGame:
         self.player_pos = Point(self.w / 2, self.h / 2)
         self.grid = self.setup_grid()
         self.score = 0
+        self.consecutive_dots_eaten = 0  # Track consecutive dots eaten for efficiency bonus
         self.power_mode = False
         self.action = Direction.NO_ACTION
         self.power_mode_timer = 0
@@ -120,6 +121,89 @@ class PacManGame:
 
         return self.grid
 
+    def eats_dot(self, grid_y: int, grid_x: int) -> bool:
+        """
+        Checks if Pac-Man is currently on a dot and consumes it.
+        :param grid_y: The 'y' coordinate of the cell grid where Pac-Man is standing.
+        :param grid_x: The 'x' coordinate of the cell grid where Pac-Man is standing.
+        :return: True if a dot is eaten, otherwise False.
+        """
+        if self.grid[grid_y][grid_x] == 2:
+            self.grid[grid_y][grid_x] = 0  # Remove the dot from the grid
+            return True
+        return False
+
+    def eats_power_pallet(self, grid_y: int, grid_x: int) -> bool:
+        """
+        Checks if Pac-Man is currently on a power-pallet and consumes it.
+        :param grid_y: The 'y' coordinate of the cell grid where Pac-Man is standing.
+        :param grid_x: The 'x' coordinate of the cell grid where Pac-Man is standing.
+        :return: True if a power pallet is eaten, otherwise False.
+        """
+        if self.grid[grid_y][grid_x] == 3:
+            self.grid[grid_y][grid_x] = 0  # Removes the Power Pellet from the grid
+            self.power_mode = True
+            self.power_mode_timer = 300
+            for ghost in self.ghosts:
+                ghost.mode = GhostMode.FRIGHTENED
+            return True
+        return False
+
+    def eats_ghost(self, x: float, y: float) -> Tuple[bool, bool]:
+        """
+        Checks if Pac-Man collides with any ghost while in power mode.
+        :param x: The 'x' coordinate of Pac-Man's position.
+        :param y: The 'y' coordinate of Pac-Man's position.
+        :return: Tuple indicating if a ghost was eaten and if the game should end.
+        """
+        game_over = False
+        for ghost in self.ghosts:
+            if (ghost.position.x, ghost.position.y) == (x, y):
+                if self.power_mode and not ghost.is_eaten:
+                    ghost.eaten()
+                    return True, game_over
+                elif not self.power_mode:
+                    game_over = True  # Pac-Man dies
+                    return False, game_over
+        return False, game_over
+
+    def too_close_to_ghost(self) -> bool:
+        """
+        Determines if Pac-Man is too close to any ghost, within a threshold.
+
+        :return: True if too close to any ghost, otherwise False.
+        """
+        for ghost in self.ghosts:
+            if abs(ghost.position.x - self.player_pos.x) < 32 and abs(ghost.position.y - self.player_pos.y) < 32:
+                return True
+        return False
+
+    def calculate_reward(self, eaten_dot: bool, eaten_power_pallet: bool, eaten_ghost: bool) -> int:
+        """
+        Calculates the reward based on the current game state, considering various actions and events.
+        :return: The calculated reward as an integer.
+        """
+        reward = 0
+        if eaten_dot:
+            self.consecutive_dots_eaten += 1  # Increment for each dot eaten consecutively
+            reward += (10 * self.consecutive_dots_eaten)
+        else:
+            self.consecutive_dots_eaten = 0
+
+        if eaten_power_pallet:
+            reward += 50  # Power pellets might be more valuable
+
+        if eaten_ghost:
+            reward += 200  # Significant reward for eating a ghost
+
+        if self.too_close_to_ghost() and not self.power_mode:
+            reward -= 50  # Penalty for being too close to a ghost when not in power mode
+
+        if np.all(self.grid != 2):  # Check if all dots are eaten
+            reward += 500  # Big bonus for clearing the board
+
+        return reward
+
     def step(self, action: Direction) -> Tuple[np.ndarray, int, bool]:
         """
         Take an action in the game environment, update the game state, and handle tunnel transitions.
@@ -172,39 +256,13 @@ class PacManGame:
         x, y = self.player_pos.x, self.player_pos.y
         grid_x, grid_y = int(x // 16), int(y // 16)
 
-        # Interaction with ghosts
-        for ghost in self.ghosts:
-            if (ghost.position.x, ghost.position.y) == (x, y):
-                if self.power_mode and not ghost.is_eaten:
-                    ghost.eaten()
-                    self.score += 200  # Award points for eating a ghost
-                    return (200, False)
-                elif not self.power_mode:
-                    return (0, True)  # Game over if Pac-Man collides with a ghost while not in power mode
+        # Handling collision with Power Pellets and Dots
+        dot_eaten = self.eats_dot(grid_y, grid_x)
+        power_pallet_eaten = self.eats_power_pallet(grid_y, grid_x)
+        ghost_eaten, game_over = self.eats_ghost(x, y)
+        reward = self.calculate_reward(dot_eaten, power_pallet_eaten, ghost_eaten)
 
-
-        # Check if Pac-Man is on Power Pellet
-        if self.grid[grid_y][grid_x] == 3:
-            self.grid[grid_y][grid_x] = 0
-            self.score += 50
-            self.power_mode = True
-            self.power_mode_timer = 300  # e.g., 300 ticks of power mode
-            for ghost in self.ghosts:
-                ghost.mode = GhostMode.FRIGHTENED
-            return (50, False)
-
-        # Check if Pac-Man is on a dot
-        if self.grid[grid_y][grid_x] == 2:
-            self.grid[grid_y][grid_x] = 0
-            self.score += 10
-            # Check if all dots are eaten
-            if np.all(self.grid != 2):
-                return (10, True)  # All dots eaten, game over
-            return (10, False)
-
-        # ToDo: Check if game-over conditions are met, e.g., collision with a ghost
-
-        return (0, False)
+        return (reward, game_over)
 
     def define_ghost_color(self, ghost: Ghost) -> Tuple[int]:
         """
