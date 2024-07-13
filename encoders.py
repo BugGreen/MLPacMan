@@ -2,6 +2,7 @@ from enum import Enum
 from collections import namedtuple
 
 Point = namedtuple('Point', 'x, y')  # Point has members `x` and `y`
+Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
 
 RED = (255, 0, 0),

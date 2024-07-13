@@ -10,7 +10,7 @@ import torch
 
 
 class PacManGame:
-    def __init__(self, w: int = 448, h: int = 576, enable_ai: bool = False):
+    def __init__(self, w: int = 448, h: int = 576, enable_ai: bool = True):
         """
         Initializes the game environment, setting up the screen, clock, and initial game state.
         Enables AI agent if specified.
@@ -22,17 +22,17 @@ class PacManGame:
         self.clock = pygame.time.Clock()
         self.running = True
         self.enable_ai = enable_ai
-        self.player_pos = Point(self.w / 2, (self.h / 2) + 96)
+        self.player_pos = Point(self.w / 2, (self.h / 2) + 64)
         self.grid = self.setup_grid()
         self.score = 0
         self.consecutive_dots_eaten = 0  # Track consecutive dots eaten for efficiency bonus
         self.power_mode = False
         self.action = Direction.NO_ACTION
         self.power_mode_timer = 0
-        self.ghosts = [Ghost(Point(192, 192), Point(2, 3), GhostName.BLINKY),
-                       Ghost(Point(192, 192), Point(2, 3), GhostName.CLYDE, movement_delay=2),
-                       Ghost(Point(208, 192), Point(2, 3), GhostName.PINKY, movement_delay=2),
-                       Ghost(Point(208, 192), Point(2, 3), GhostName.INKY, movement_delay=2)]
+        self.ghosts = [Ghost(Point(208, 160), Point(2, 3), GhostName.BLINKY),
+                       Ghost(Point(208, 160), Point(2, 3), GhostName.CLYDE, movement_delay=2),
+                       Ghost(Point(224, 160), Point(2, 3), GhostName.PINKY, movement_delay=2),
+                       Ghost(Point(224, 160), Point(2, 3), GhostName.INKY, movement_delay=2)]
 
         # Initialize AI Agent if enabled
         if self.enable_ai:
@@ -56,10 +56,10 @@ class PacManGame:
         grid_map = """
         XXXXXXXXXXXXXXXXXXXXXXXXXXXX
         XP           XX           PX
-        X  XXX XXXX  XX  XXXX XXX  X
-        X  XXX XXXX  XX  XXXX XXX  X
+        X XXXX XXXXX XX XXXXX XXXX X
+        X XXXX XXXXX XX XXXXX XXXX X
         X                          X
-        X  XXX X XXXXXXXXXX X XXX  X
+        X XXXX X XXXXXXXXXX X XXXX X
         X      X     XX     X      X
         XXXXXX XXXXX XX XXXXX XXXXXX
         TTTTTX X            X XTTTTT
@@ -83,11 +83,11 @@ class PacManGame:
         X XXXX X    X X X   X XXXX X
         X XXXX XXXX X X X XXX XXXX X
         X                          X
-        XX XX XXXXX XXXX XXXXX XX XX
+        XX XX XXXX XXXXXX XXXX XX XX
         X  PX X      XX      X XP  X
-        X            XX            X
-        X  XXX XXXX  XX  XXXX XXX  X
-        X  XXX XXXX  XX  XXXX XXX  X
+        X X     X XX XX XX X     X X
+        X XXXX XX XX XX XX XX XXXX X
+        X XXXX XX XX XX XX XX XXXX X
         X                          X
         XXXXXXXXXXXXXXXXXXXXXXXXXXXX
         """
@@ -116,7 +116,7 @@ class PacManGame:
         :return: The initial state of the game grid.
         """
         # Reset player position to the center or a predefined starting point
-        self.player_pos = Point(self.w / 2, (self.h / 2) + 96)
+        self.player_pos = Point(self.w / 2, (self.h / 2) + 64)
         self.grid = self.setup_grid()
         self.score = 0
         self.power_mode = False
@@ -185,12 +185,20 @@ class PacManGame:
                 return True
         return False
 
-    def calculate_reward(self, eaten_dot: bool, eaten_power_pallet: bool, eaten_ghost: bool) -> int:
+    def calculate_reward(self, eaten_dot: bool, eaten_power_pallet: bool, eaten_ghost: bool, hit_wall: bool) -> int:
         """
-        Calculates the reward based on the current game state, considering various actions and events.
+        Calculate the reward based on the actions taken and the game events.
+
+        :param eaten_dot: Boolean indicating if a dot was eaten.
+        :param eaten_power_pallet: Boolean indicating if a power pallet was eaten.
+        :param eaten_ghost: Boolean indicating if a ghost was eaten.
+        :param hit_wall: Boolean indicating if a wall collision occurred.
         :return: The calculated reward as an integer.
         """
         reward = 0
+        if hit_wall:
+            reward -= 30  # Negative reward for hitting a wall
+
         if eaten_dot:
             self.consecutive_dots_eaten += 1  # Increment for each dot eaten consecutively
             reward += (10 * self.consecutive_dots_eaten)
@@ -219,6 +227,7 @@ class PacManGame:
         :return: A tuple containing the new game state as a numpy array, the reward as an integer, and a boolean indicating if the game is over.
         """
         new_x, new_y = self.player_pos.x, self.player_pos.y
+        hit_wall = False
 
         if action == Direction.UP:
             new_y -= 16
@@ -236,10 +245,13 @@ class PacManGame:
             new_x = 0  # Wrap to the left side
 
         # Check if the new position is a wall
-        if not self.grid[int(new_y // 16)][int(new_x // 16)] == 1:  # Not a wall
+        # Check if the new position is a wall
+        if self.grid[int(new_y // 16)][int(new_x // 16)] == 1:
+            hit_wall = True
+        else:
             self.player_pos = Point(new_x, new_y)
 
-        reward, done = self.check_collision()
+        reward, done = self.check_collision(hit_wall)
         return (self.grid.copy(), reward, done)
 
     def update_power_mode(self):
@@ -254,7 +266,7 @@ class PacManGame:
                 for ghost in self.ghosts:
                     ghost.mode = GhostMode.CHASE  # Reset ghosts to chase mode
 
-    def check_collision(self) -> Tuple[int, bool]:
+    def check_collision(self, hit_wall: bool) -> Tuple[int, bool]:
         """
         Check for collisions with walls or dots and update the score.
 
@@ -267,7 +279,7 @@ class PacManGame:
         dot_eaten = self.eats_dot(grid_y, grid_x)
         power_pallet_eaten = self.eats_power_pallet(grid_y, grid_x)
         ghost_eaten, game_over = self.eats_ghost(x, y)
-        reward = self.calculate_reward(dot_eaten, power_pallet_eaten, ghost_eaten)
+        reward = self.calculate_reward(dot_eaten, power_pallet_eaten, ghost_eaten, hit_wall)
 
         return (reward, game_over)
 
