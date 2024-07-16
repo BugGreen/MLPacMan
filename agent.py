@@ -5,11 +5,13 @@ import torch.nn as nn
 from collections import deque
 from typing import List, Tuple
 from encoders import Transition
+from ExplorationStrategy import EpsilonGreedy, GeneticAlgorithm
+
 
 
 class PacmanAgent:
     def __init__(self, model: nn.Module, optimizer: torch.optim.Optimizer, loss_fn: nn.modules.loss,
-                 action_space: int, gamma: float = 0.55, eps_start: float = 0.9, eps_end: float = 0.05, eps_decay: int = 300):
+                 action_space: int, strategy: [EpsilonGreedy, GeneticAlgorithm], gamma: float = 0.77):
         """
         Initialize the PacmanAgent with a model, optimizer, and specified parameters.
 
@@ -18,50 +20,48 @@ class PacmanAgent:
         :param loss_fn: The loss function used for training.
         :param action_space: The number of possible actions.
         :param gamma: The discount factor for future rewards.
-        :param eps_start: The starting value of epsilon for the epsilon-greedy policy.
-        :param eps_end: The minimum value of epsilon after decay.
-        :param eps_decay: The rate of decay for epsilon.
+        :param strategy:
         """
         self.model = model
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.action_space = action_space
         self.gamma = gamma  # Discount factor
-        self.memory = deque(maxlen=10000)
-        self.epsilon = eps_start
-        self.eps_end = eps_end
-        self.eps_decay = eps_decay
+        self.short_memory = deque(maxlen=1000)  # Short-term memory
+        self.long_memory = deque(maxlen=10000)  # Long-term memory
         self.steps_done = 0
+        self.strategy = strategy
 
     def select_action(self, state: torch.Tensor) -> torch.Tensor:
         """
-        Select an action using an epsilon-greedy policy.
+        Select an action using an epsilon-greedy policy or a genetic algorithm.
 
         :param state: The current state of the environment.
         :return: The action to take.
         """
-        sample = random.random()
-        # eps_threshold determines the probability with which the agent will either explore or exploit
-        eps_threshold = self.eps_end + (self.epsilon - self.eps_end) * \
-                        np.exp(-1. * self.steps_done / self.eps_decay)
-        self.steps_done += 1
+        if isinstance(self.strategy, EpsilonGreedy) or isinstance(self.strategy, GeneticAlgorithm):
+            return self.strategy.select_action(state, self.model, self.steps_done, self.action_space)
+            self.steps_done += 1
 
-        if sample > eps_threshold:
-            with torch.no_grad():
-                return self.model(state).max(1)[1].view(1, 1)
-        else:
-            return torch.tensor([[random.randrange(self.action_space)]], dtype=torch.long)
-
-    def remember(self, state: torch.Tensor, action: torch.Tensor, next_state: torch.Tensor, reward: float):
+    def remember(self, state: torch.Tensor, action: torch.Tensor, next_state: torch.Tensor, reward: float, done: bool
+                 , score: int, highest_score: int):
         """
         Store a transition in memory.
 
+        :param highest_score:
+        :param score:
+        :param done: determines if game over
         :param state: The current state.
         :param action: The action taken.
         :param next_state: The next state.
         :param reward: The reward received.
         """
-        self.memory.append((state, action, next_state, reward))
+        # Store all transitions in short-term memory
+        self.short_memory.append((state, action, next_state, reward))
+
+        # Criteria to move to long-term memory
+        if score >= .85 * highest_score:
+            self.long_memory.append((state, action, next_state, reward))
 
     def optimize_model(self, batch_size: int):
         """
@@ -69,10 +69,15 @@ class PacmanAgent:
 
         :param batch_size: int - The number of samples to draw from memory for creating a minibatch.
         """
-        if len(self.memory) < batch_size:
+
+        if len(self.short_memory) < int(batch_size * 0.3) or len(self.long_memory) < batch_size - int(batch_size * 0.3):
             return  # Exit if there aren't enough samples in memory
 
-        transitions = random.sample(self.memory, batch_size)
+        # Sample from both memories
+        short_samples = random.sample(self.short_memory, int(batch_size * 0.3))
+        long_samples = random.sample(self.long_memory, (batch_size - int(batch_size * 0.3)))
+        transitions = short_samples + long_samples
+        # transitions = random.sample(self.long_memory, batch_size)
         batch = Transition(*zip(*transitions))
 
         # Create batches by concatenating all states, actions, etc
@@ -103,3 +108,4 @@ class PacmanAgent:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        return loss.item()

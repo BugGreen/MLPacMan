@@ -1,3 +1,5 @@
+import random
+
 import pygame
 import sys
 import numpy as np
@@ -7,6 +9,7 @@ from encoders import *
 from agent import PacmanAgent
 from model import init_model
 import torch
+from ExplorationStrategy import EpsilonGreedy, GeneticAlgorithm
 
 
 class PacManGame:
@@ -24,11 +27,18 @@ class PacManGame:
         self.enable_ai = enable_ai
         self.player_pos = Point(self.w / 2, (self.h / 2) + 64)
         self.grid = self.setup_grid()
-        self.score = 0
+        self.initial_dots_amount = np.sum(self.grid == 2)
+        pygame.font.init()  # Initialize font module
+        self.font = pygame.font.Font(None, 26)  # Create a Font object from the system fonts
+
+        self.score, self.highest_score = 0, 0
         self.consecutive_dots_eaten = 0  # Track consecutive dots eaten for efficiency bonus
         self.power_mode = False
         self.action = Direction.NO_ACTION
         self.power_mode_timer = 0
+        self.total_rewards = []
+        self.total_losses = []
+        self.episode_lengths = []
         self.ghosts = [Ghost(Point(208, 160), Point(2, 3), GhostName.BLINKY),
                        Ghost(Point(208, 160), Point(2, 3), GhostName.CLYDE, movement_delay=2),
                        Ghost(Point(224, 160), Point(2, 3), GhostName.PINKY, movement_delay=2),
@@ -37,9 +47,10 @@ class PacManGame:
         # Initialize AI Agent if enabled
         if self.enable_ai:
             input_dim = np.prod(self.grid.shape)  # Assuming a flattened grid as input
+            strategy = EpsilonGreedy()
             output_dim = 4  # Four possible actions: UP, DOWN, LEFT, RIGHT
             self.model, self.optimizer, self.loss_fn = init_model(input_dim, output_dim)
-            self.agent = PacmanAgent(self.model, self.optimizer, self.loss_fn, output_dim)
+            self.agent = PacmanAgent(self.model, self.optimizer, self.loss_fn, output_dim, strategy)
 
     @staticmethod
     def setup_grid() -> np.ndarray:
@@ -115,8 +126,9 @@ class PacManGame:
 
         :return: The initial state of the game grid.
         """
+        initialization_points = [64]
         # Reset player position to the center or a predefined starting point
-        self.player_pos = Point(self.w / 2, (self.h / 2) + 64)
+        self.player_pos = Point(self.w / 2, (self.h / 2) + random.sample(initialization_points, 1)[0])
         self.grid = self.setup_grid()
         self.score = 0
         self.power_mode = False
@@ -185,7 +197,8 @@ class PacManGame:
                 return True
         return False
 
-    def calculate_reward(self, eaten_dot: bool, eaten_power_pallet: bool, eaten_ghost: bool, hit_wall: bool) -> int:
+    def calculate_reward(self, eaten_dot: bool, eaten_power_pallet: bool, eaten_ghost: bool, hit_wall: bool,
+                         game_over: bool) -> int:
         """
         Calculate the reward based on the actions taken and the game events.
 
@@ -193,6 +206,7 @@ class PacManGame:
         :param eaten_power_pallet: Boolean indicating if a power pallet was eaten.
         :param eaten_ghost: Boolean indicating if a ghost was eaten.
         :param hit_wall: Boolean indicating if a wall collision occurred.
+        :param game_over: Boolean indicationg if game over occurred.
         :return: The calculated reward as an integer.
         """
         reward = 0
@@ -200,24 +214,40 @@ class PacManGame:
             reward -= 30  # Negative reward for hitting a wall
 
         if eaten_dot:
+            # Increase reward as fewer dots remain
+            remaining_dots = np.sum(self.grid == 2)
+            dot_value = 10 + (self.initial_dots_amount - remaining_dots) // 10
             self.consecutive_dots_eaten += 1  # Increment for each dot eaten consecutively
-            reward += (10 * self.consecutive_dots_eaten)
+            reward += (dot_value * self.consecutive_dots_eaten)
+            self.score += 10
         else:
             self.consecutive_dots_eaten = 0
 
         if eaten_power_pallet:
-            reward += 50  # Power pellets might be more valuable
+            # More valuable if more ghosts are close
+            close_ghosts = sum(1 for ghost in self.ghosts if self.distance_to_ghost(ghost) < 50)
+            reward += 50 + 20 * close_ghosts
+            self.score += 50
 
         if eaten_ghost:
-            reward += 200  # Significant reward for eating a ghost
+            time_left = self.power_mode_timer
+            reward += 200 + 10 * time_left  # More valuable the sooner the ghost is eaten after power pellet
+            self.score += 100
 
         if self.too_close_to_ghost() and not self.power_mode:
             reward -= 50  # Penalty for being too close to a ghost when not in power mode
 
+        if game_over:
+            reward -= 200
+
         if np.all(self.grid != 2):  # Check if all dots are eaten
             reward += 500  # Big bonus for clearing the board
 
+        self.highest_score = max(self.score, self.highest_score)
         return reward
+
+    def distance_to_ghost(self, ghost):
+        return np.sqrt((self.player_pos.x - ghost.position.x) ** 2 + (self.player_pos.y - ghost.position.y) ** 2)
 
     def step(self, action: Direction) -> Tuple[np.ndarray, int, bool]:
         """
@@ -279,7 +309,7 @@ class PacManGame:
         dot_eaten = self.eats_dot(grid_y, grid_x)
         power_pallet_eaten = self.eats_power_pallet(grid_y, grid_x)
         ghost_eaten, game_over = self.eats_ghost(x, y)
-        reward = self.calculate_reward(dot_eaten, power_pallet_eaten, ghost_eaten, hit_wall)
+        reward = self.calculate_reward(dot_eaten, power_pallet_eaten, ghost_eaten, hit_wall, game_over)
 
         return (reward, game_over)
 
@@ -339,6 +369,14 @@ class PacManGame:
             else:
                 ghost_color = self.define_ghost_color(ghost)
             pygame.draw.circle(self.screen, ghost_color, (ghost.position.x + 8, ghost.position.y + 8), 8)
+
+        # Render current score and high score
+        score_text = self.font.render(f"Score: {self.score}", True, (255, 255, 255))
+        high_score_text = self.font.render(f"Highest Score: {self.highest_score}", True, (255, 255, 255))
+
+        # Position the text on the screen
+        self.screen.blit(score_text, (10, 0))
+        self.screen.blit(high_score_text, (self.w - 160, 0))
         pygame.display.flip()
 
     @staticmethod
@@ -364,7 +402,6 @@ class PacManGame:
         """
         Main game loop. Handles both AI-driven and manual game play based on the enable_ai flag.
         """
-        state = np.array(self.grid).flatten()  # Flatten grid for input to AI
         while self.running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -376,9 +413,9 @@ class PacManGame:
                 state = np.array(self.grid).flatten()  # Make sure this is done every time state is updated
                 state = torch.from_numpy(state).float().unsqueeze(0)  # Adding batch dimension
                 action = self.agent.select_action(state)
-                print(f"Action chosen by AI: {self.map_action_to_direction(action.item())}")  # Log the action chosen by AI
+                # print(f"Action chosen by AI: {self.map_action_to_direction(action.item())}")  # Log the action chosen by AI
                 next_state, reward, done = self.step(self.map_action_to_direction(action.item()))
-                self.agent.remember(state, action, next_state, reward)  # Store the transition in memory
+                self.agent.remember(state, action, next_state, reward, done, self.score, self.highest_score)  # Store the transition in memory
                 self.agent.optimize_model(32)  # Perform one step of the optimization (on the target network)
             else:
                 action = self.handle_keys()
