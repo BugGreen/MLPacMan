@@ -11,7 +11,7 @@ from ExplorationStrategy import EpsilonGreedy, GeneticAlgorithm
 
 class PacmanAgent:
     def __init__(self, model: nn.Module, optimizer: torch.optim.Optimizer, loss_fn: nn.modules.loss,
-                 action_space: int, strategy: [EpsilonGreedy, GeneticAlgorithm], gamma: float = 0.77):
+                 action_space: int, strategy: [EpsilonGreedy, GeneticAlgorithm], gamma: float = 0.66):
         """
         Initialize the PacmanAgent with a model, optimizer, and specified parameters.
 
@@ -57,10 +57,11 @@ class PacmanAgent:
         :param reward: The reward received.
         """
         # Store all transitions in short-term memory
-        self.short_memory.append((state, action, next_state, reward))
+        if score > .6 * highest_score:
+            self.short_memory.append((state, action, next_state, reward))
 
         # Criteria to move to long-term memory
-        if score >= .85 * highest_score:
+        if score >= 500 and score >= .85 * highest_score:
             self.long_memory.append((state, action, next_state, reward))
 
     def optimize_model(self, batch_size: int):
@@ -102,7 +103,7 @@ class PacmanAgent:
         expected_state_action_values = (next_state_values * self.gamma) + reward_batch
 
         # Compute Huber loss
-        loss = self.loss_fn(current_q_values, expected_state_action_values.unsqueeze(1))
+        loss = self.loss_fn(current_q_values.float(), expected_state_action_values.unsqueeze(1).float())
 
         # Optimize the model
         self.optimizer.zero_grad()

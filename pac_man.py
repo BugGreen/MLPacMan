@@ -1,5 +1,5 @@
 import random
-
+import matplotlib.pyplot as plt
 import pygame
 import sys
 import numpy as np
@@ -9,7 +9,7 @@ from encoders import *
 from agent import PacmanAgent
 from model import init_model
 import torch
-from ExplorationStrategy import EpsilonGreedy, GeneticAlgorithm
+from ExplorationStrategy import EpsilonGreedy
 
 
 class PacManGame:
@@ -30,7 +30,7 @@ class PacManGame:
         self.initial_dots_amount = np.sum(self.grid == 2)
         pygame.font.init()  # Initialize font module
         self.font = pygame.font.Font(None, 26)  # Create a Font object from the system fonts
-
+        self.lives = 3  # Pac-Man starts with 3 lives
         self.score, self.highest_score = 0, 0
         self.consecutive_dots_eaten = 0  # Track consecutive dots eaten for efficiency bonus
         self.power_mode = False
@@ -52,8 +52,7 @@ class PacManGame:
             self.model, self.optimizer, self.loss_fn = init_model(input_dim, output_dim)
             self.agent = PacmanAgent(self.model, self.optimizer, self.loss_fn, output_dim, strategy)
 
-    @staticmethod
-    def setup_grid() -> np.ndarray:
+    def setup_grid(self) -> np.ndarray:
         """
         Set up the initial game grid using a multiline string for easy visual editing.
         Each character represents a different type of cell:
@@ -64,44 +63,8 @@ class PacManGame:
 
         :return: A numpy array representing the game grid.
         """
-        grid_map = """
-        XXXXXXXXXXXXXXXXXXXXXXXXXXXX
-        XP           XX           PX
-        X XXXX XXXXX XX XXXXX XXXX X
-        X XXXX XXXXX XX XXXXX XXXX X
-        X                          X
-        X XXXX X XXXXXXXXXX X XXXX X
-        X      X     XX     X      X
-        XXXXXX XXXXX XX XXXXX XXXXXX
-        TTTTTX X            X XTTTTT
-        TTTTTX X XXXXTTXXXX X XTTTTT
-        XXXXXX   XTTTTTTTTX   XXXXXX
-        T      X XTTTTTTTTX X      T
-        XXXXXX X XXXXXXXXXX X XXXXXX
-        TTTTTX X            X XTTTTT
-        TTTTTX X XXXXXXXXXX X XTTTTT
-        XXXXXX       XX       XXXXXX
-        X      XXXXX XX XXXXX      X
-        X XXXX       XX       XXXX X
-        X    X XXXXX XX XXXXX X    X
-        XX X X                X X XX
-        TX X   XXXXXXXXXXXXXX   X XT
-        XX XXX XXXXXXXXXXXXXX XXX XX
-        X                          X
-        X XXXX XXXX XXXXX XXX XXXX X
-        X XXXX X    X X X X   XXXX X
-        X XXXX X    X X X XXX XXXX X
-        X XXXX X    X X X   X XXXX X
-        X XXXX XXXX X X X XXX XXXX X
-        X                          X
-        XX XX XXXX XXXXXX XXXX XX XX
-        X  PX X      XX      X XP  X
-        X X     X XX XX XX X     X X
-        X XXXX XX XX XX XX XX XXXX X
-        X XXXX XX XX XX XX XX XXXX X
-        X                          X
-        XXXXXXXXXXXXXXXXXXXXXXXXXXXX
-        """
+
+        grid_map = training_grid_map if self.enable_ai else normal_grid_map
 
         grid_map = grid_map.strip().split('\n')
         grid_map = [striped_line.lstrip(' ') for striped_line in grid_map]
@@ -126,11 +89,15 @@ class PacManGame:
 
         :return: The initial state of the game grid.
         """
-        initialization_points = [64]
+        initialization_points = [64]  # [-224, 64]
+
+        if self.lives == 0:
+            self.score = 0
+            self.lives = 3  # Reset lives to 3 on full reset
+            self.grid = self.setup_grid()
+
         # Reset player position to the center or a predefined starting point
         self.player_pos = Point(self.w / 2, (self.h / 2) + random.sample(initialization_points, 1)[0])
-        self.grid = self.setup_grid()
-        self.score = 0
         self.power_mode = False
         self.power_mode_timer = 0
 
@@ -193,7 +160,7 @@ class PacManGame:
         :return: True if too close to any ghost, otherwise False.
         """
         for ghost in self.ghosts:
-            if abs(ghost.position.x - self.player_pos.x) < 32 and abs(ghost.position.y - self.player_pos.y) < 32:
+            if abs(ghost.position.x - self.player_pos.x) < 16 and abs(ghost.position.y - self.player_pos.y) < 16:
                 return True
         return False
 
@@ -211,7 +178,7 @@ class PacManGame:
         """
         reward = 0
         if hit_wall:
-            reward -= 30  # Negative reward for hitting a wall
+            reward -= 1  # Negative reward for hitting a wall
 
         if eaten_dot:
             # Increase reward as fewer dots remain
@@ -225,8 +192,8 @@ class PacManGame:
 
         if eaten_power_pallet:
             # More valuable if more ghosts are close
-            close_ghosts = sum(1 for ghost in self.ghosts if self.distance_to_ghost(ghost) < 50)
-            reward += 50 + 20 * close_ghosts
+            close_ghosts = sum(1 for ghost in self.ghosts if self.distance_to_ghost(ghost) < 32)
+            reward += 100 + 20 * close_ghosts
             self.score += 50
 
         if eaten_ghost:
@@ -234,11 +201,23 @@ class PacManGame:
             reward += 200 + 10 * time_left  # More valuable the sooner the ghost is eaten after power pellet
             self.score += 100
 
-        if self.too_close_to_ghost() and not self.power_mode:
-            reward -= 50  # Penalty for being too close to a ghost when not in power mode
+        if self.too_close_to_ghost():
+            if not self.power_mode:
+                reward -= 30  # Penalty for being too close to a ghost when not in power mode
+            else:
+                reward += 3
+
+        if self.power_mode:
+            nearest_ghost_distance = min(self.distance_to_ghost(ghost) for ghost in self.ghosts)
+            if nearest_ghost_distance > 100:  # too far from any ghost
+                reward -= 2 * (nearest_ghost_distance // 100)  # Penalize for being too far from any ghost
+            else:
+                reward += 10 - (nearest_ghost_distance // 10)  # Reward for getting closer to a ghost
 
         if game_over:
-            reward -= 200
+            reward -= 400
+            if self.lives == 0:
+                reward += self.score // 2
 
         if np.all(self.grid != 2):  # Check if all dots are eaten
             reward += 500  # Big bonus for clearing the board
@@ -373,10 +352,13 @@ class PacManGame:
         # Render current score and high score
         score_text = self.font.render(f"Score: {self.score}", True, (255, 255, 255))
         high_score_text = self.font.render(f"Highest Score: {self.highest_score}", True, (255, 255, 255))
+        # Render remaining lives
+        remaining_lives_text = self.font.render(f'Lives: {self.lives}', True, (225, 225, 225))
 
         # Position the text on the screen
         self.screen.blit(score_text, (10, 0))
         self.screen.blit(high_score_text, (self.w - 160, 0))
+        self.screen.blit(remaining_lives_text, (self.w // 2 - 20, self.h - 16))
         pygame.display.flip()
 
     @staticmethod
@@ -402,6 +384,8 @@ class PacManGame:
         """
         Main game loop. Handles both AI-driven and manual game play based on the enable_ai flag.
         """
+        current_reward = 0
+        episode_length = 0
         while self.running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -416,18 +400,51 @@ class PacManGame:
                 # print(f"Action chosen by AI: {self.map_action_to_direction(action.item())}")  # Log the action chosen by AI
                 next_state, reward, done = self.step(self.map_action_to_direction(action.item()))
                 self.agent.remember(state, action, next_state, reward, done, self.score, self.highest_score)  # Store the transition in memory
-                self.agent.optimize_model(32)  # Perform one step of the optimization (on the target network)
             else:
                 action = self.handle_keys()
                 next_state, reward, done = self.step(action)
 
-            state = next_state if not done else self.reset()
+            if not done:
+                current_reward += reward
+                episode_length += 1
+            else:
+
+                self.lives -= 1
+                if self.lives > 0:
+                    print(f"Lost a life, {self.lives} remaining")
+                    self.reset()
+                else:
+                    self.total_rewards.append(current_reward)
+                    self.episode_lengths.append(episode_length)
+                    loss = self.agent.optimize_model(64)  # Perform one step of the optimization (on the target network)
+                    if loss is not None:
+                        self.total_losses.append(loss)
+                    print(f"Episode finished with reward: {current_reward}, Loss: {loss}, Score: {self.score}")
+                    current_reward = 0
+                    episode_length = 0
+                    self.reset()
 
             for ghost in self.ghosts:
                 ghost.update(self.grid, self.player_pos)  # Update ghosts based on their movement delay
 
             self.render()
             self.clock.tick(20)  # Maintain 20 FPS
+
+    def plot_progress(self) -> None:
+        """
+        Plots the training progress graphs for rewards, losses, and episode lengths.
+        """
+        plt.figure(figsize=(20, 5))
+        plt.subplot(131)
+        plt.title('Rewards per Episode')
+        plt.plot(self.total_rewards)
+        plt.subplot(132)
+        plt.title('Loss per Training Step')
+        plt.plot(self.total_losses)
+        plt.subplot(133)
+        plt.title('Episode Lengths')
+        plt.plot(self.episode_lengths)
+        plt.show()
 
     @staticmethod
     def handle_keys() -> Direction:
@@ -451,3 +468,4 @@ class PacManGame:
 if __name__ == "__main__":
     game = PacManGame()
     game.run()
+    game.plot_progress()

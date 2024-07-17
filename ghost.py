@@ -85,10 +85,11 @@ class Ghost:
                 self.target = Point(pac_man_pos.x - 2 * 16, pac_man_pos.y - 2 * 16)
             elif self.name == GhostName.CLYDE:
                 # Clyde switches between scatter and chasing close to Pac-Man
-                if np.linalg.norm(np.array([pac_man_pos.x - self.position.x, pac_man_pos.y - self.position.y])) > 8*16:
+                if np.linalg.norm(np.array([pac_man_pos.x - self.position.x, pac_man_pos.y - self.position.y])) > 2 * 16:
                     self.target = pac_man_pos
                 else:
                     self.target = self.target_corner
+
             self.position = self.a_star_search(grid, self.position, self.target)
         # Adjust position for tunnel transitions
         if self.position.x < 0:  # Exiting left side
