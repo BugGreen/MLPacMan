@@ -24,6 +24,7 @@ class Ghost:
         self.current_delay = self.movement_delay
         self.is_eaten = False
         self.respawn_timer = 0
+        self.original_cell_value = 0
 
     def eaten(self):
         """
@@ -34,24 +35,28 @@ class Ghost:
         self.mode = GhostMode.RESPAWNING
         self.respawn_timer = 10
 
-    def update(self, grid: np.ndarray, pac_man_pos: Point):
+    def update(self, grid: np.ndarray, pac_man_pos: Point) -> np.ndarray:
         """
         Update the ghost's state each game tick. Handle the countdown and respawn.
         Update the ghost's position based on its movement delay.
 
         :param grid: The game grid to check for walls and paths.
         :param pac_man_pos: Current position of Pac-Man as a Point.
+
+        :return: Updated game grid with the ghosts positions.
+
         """
         if self.current_delay > 0:
             self.current_delay -= 1
         else:
-            self.move(grid, pac_man_pos)
+            grid = self.move(grid, pac_man_pos)
             self.current_delay = self.movement_delay  # Reset the movement delay
         if self.mode == GhostMode.RESPAWNING:
             if self.respawn_timer > 0:
                 self.respawn_timer -= 1
             else:
                 self.respawn()
+        return grid
 
     def respawn(self):
         """
@@ -62,13 +67,22 @@ class Ghost:
         # ToDo: Make the movable after respawn method is called even if power_mode is set to True
         self.position = self.initial_position  # Respawn at the initial position
 
-    def move(self, grid: np.ndarray, pac_man_pos: Point):
+    def move(self, grid: np.ndarray, pac_man_pos: Point) -> np.ndarray:
         """
         Move the ghost based on its current mode.
 
         :param grid: The game grid to check for walls and paths.
         :param pac_man_pos: Current position of Pac-Man as a Point.
+
+        :return: Updated game grid.
         """
+
+        # Use current position to store the cell value before ghost is on it
+        old_position = self.position
+        old_x, old_y = int(old_position.x // 16), int(old_position.y // 16)
+        if self.original_cell_value not in [4, 5, 6]:
+            grid[old_y][old_x] = self.original_cell_value
+
         if self.mode == GhostMode.SCATTER:
             # self.target = self.target_corner
             self.position = self.a_star_search(grid, self.position, self.target_corner)
@@ -81,8 +95,7 @@ class Ghost:
                 # Pinky targets four tiles ahead of Pac-Man in his current direction
                 self.target = Point(pac_man_pos.x + 4 * 16, pac_man_pos.y + 4 * 16)
             elif self.name == GhostName.INKY:
-                # Placeholder for Inky's complex behavior
-                self.target = Point(pac_man_pos.x - 2 * 16, pac_man_pos.y - 2 * 16)
+                self.target = Point(pac_man_pos.x - 32, pac_man_pos.y - 32)
             elif self.name == GhostName.CLYDE:
                 # Clyde switches between scatter and chasing close to Pac-Man
                 if np.linalg.norm(np.array([pac_man_pos.x - self.position.x, pac_man_pos.y - self.position.y])) > 2 * 16:
@@ -91,11 +104,18 @@ class Ghost:
                     self.target = self.target_corner
 
             self.position = self.a_star_search(grid, self.position, self.target)
+
+        new_position = self.position
+        new_x, new_y = int(new_position.x // 16), int(new_position.y // 16)
+        self.original_cell_value = grid[new_y][new_x]
+        grid[new_y][new_x] = 5 if self.mode is not GhostMode.FRIGHTENED else 6
         # Adjust position for tunnel transitions
         if self.position.x < 0:  # Exiting left side
             self.position.x = grid.shape[1] * 16 - 16  # Wrap to the right side
         elif self.position.x >= grid.shape[1] * 16:  # Exiting right side
             self.position.x = 0  # Wrap to the left side
+
+        return grid
 
     def flee_from_pacman(self, grid: np.ndarray) -> Point:
         """
@@ -180,7 +200,7 @@ class Ghost:
         :return: The next move as a Point in the path from start to end.
         """
         if start == end:
-            print("Ghost has reached Pac-Man. No movement needed.")
+            # print("Ghost has reached Pac-Man. No movement needed.")
             return start  # Ghost is already at the target; no movement required.
 
         open_set = PriorityQueue()
@@ -209,15 +229,23 @@ class Ghost:
 
         return start  # Return start as a fallback if no path is found
 
-    def reset(self):
+    def reset(self, grid: np.ndarray) -> np.ndarray:
         """
-        Reset the ghost to its initial state and position.
+        Reset the ghost to its initial state and position. And updates the grid.
+
+        :param grid: The game grid to check for walls and paths.
+        :return: Updated game grid.
         """
+        old_position = self.position
+        old_x, old_y = int(old_position.x // 16), int(old_position.y // 16)
+        if self.original_cell_value not in [4, 5, 6]:
+            grid[old_y][old_x] = self.original_cell_value
+            self.original_cell_value = 0
         self.position = self.initial_position  # Reset position to the initial
         self.is_eaten = False
         self.mode = GhostMode.CHASE  # Reset mode to initial state, typically CHASE
         self.current_delay = self.movement_delay  # Reset any counters or delays
-
+        return grid
 
     @staticmethod
     def heuristic(grid: np.ndarray, a: Point, b: Point) -> int:

@@ -13,10 +13,15 @@ from ExplorationStrategy import EpsilonGreedy
 
 
 class PacManGame:
-    def __init__(self, w: int = 448, h: int = 576, enable_ai: bool = True):
+    def __init__(self, w: int = 448, h: int = 576, enable_ai: bool = True, test_mode: bool = False, model_path: str = None):
         """
-        Initializes the game environment, setting up the screen, clock, and initial game state.
-        Enables AI agent if specified.
+        Initializes the Pac-Man game environment, either in training or testing mode.
+
+        :param w: Width of the game window.
+        :param h: Height of the game window.
+        :param enable_ai: Flag to determine if the AI agent should be used.
+        :param test_mode: Flag to determine if the game should run in test mode.
+        :param model_path: Path to the pre-trained model, used if test_mode is True.
         """
         pygame.init()
         self.w, self.h = w, h
@@ -25,6 +30,8 @@ class PacManGame:
         self.clock = pygame.time.Clock()
         self.running = True
         self.enable_ai = enable_ai
+        self.test_mode = test_mode
+        self.model_path = model_path
         self.player_pos = Point(self.w / 2, (self.h / 2) + 64)
         self.grid = self.setup_grid()
         self.initial_dots_amount = np.sum(self.grid == 2)
@@ -44,13 +51,38 @@ class PacManGame:
                        Ghost(Point(224, 160), Point(2, 3), GhostName.PINKY, movement_delay=2),
                        Ghost(Point(224, 160), Point(2, 3), GhostName.INKY, movement_delay=2)]
 
+
         # Initialize AI Agent if enabled
         if self.enable_ai:
-            input_dim = np.prod(self.grid.shape)  # Assuming a flattened grid as input
-            strategy = EpsilonGreedy()
-            output_dim = 4  # Four possible actions: UP, DOWN, LEFT, RIGHT
-            self.model, self.optimizer, self.loss_fn = init_model(input_dim, output_dim)
-            self.agent = PacmanAgent(self.model, self.optimizer, self.loss_fn, output_dim, strategy)
+            if self.test_mode and self.model_path:
+                self.model, self.optimizer, self.loss_fn = init_model(np.prod(self.grid.shape), 4)
+                self.load_model(model_path)
+                self.strategy = None  # No strategy required for testing
+            else:
+                input_dim = np.prod(self.grid.shape)  # Assuming a flattened grid as input
+                strategy = EpsilonGreedy()
+                output_dim = 4  # Four possible actions: UP, DOWN, LEFT, RIGHT
+                self.model, self.optimizer, self.loss_fn = init_model(input_dim, output_dim)
+                self.agent = PacmanAgent(self.model, self.optimizer, self.loss_fn, output_dim, strategy)
+
+    def load_model(self, filename: str = 'pacman_model.pth') -> None:
+        """
+        Load a model's state dictionary from a file.
+
+        :param model: The PyTorch model to load the parameters into.
+        :param filename: The filename from which to load the model parameters.
+        """
+        self.model.load_state_dict(torch.load(filename))
+        self.model.eval()  # Set the model to evaluation mode
+        print(f"Model loaded from {filename}")
+
+    def save_model(self, filename: str = 'pacman_model_2.pth') -> None:
+        """
+        Save the model's state dictionary to a file.
+        :param filename: The filename where the model should be saved.
+        """
+        torch.save(self.model.state_dict(), filename)
+        print(f"Model saved to {filename}")
 
     def setup_grid(self) -> np.ndarray:
         """
@@ -64,7 +96,7 @@ class PacManGame:
         :return: A numpy array representing the game grid.
         """
 
-        grid_map = training_grid_map if self.enable_ai else normal_grid_map
+        grid_map = training_grid_map if self.enable_ai and not self.test_mode else normal_grid_map
 
         grid_map = grid_map.strip().split('\n')
         grid_map = [striped_line.lstrip(' ') for striped_line in grid_map]
@@ -103,7 +135,7 @@ class PacManGame:
 
         # Reset all ghosts to their initial positions and states
         for ghost in self.ghosts:
-            ghost.reset()
+            self.grid = ghost.reset(self.grid)
 
         return self.grid
 
@@ -115,7 +147,7 @@ class PacManGame:
         :return: True if a dot is eaten, otherwise False.
         """
         if self.grid[grid_y][grid_x] == 2:
-            self.grid[grid_y][grid_x] = 0  # Remove the dot from the grid
+            self.grid[grid_y][grid_x] = 4  # Remove the dot from the grid and now Pac-Man is there
             return True
         return False
 
@@ -127,7 +159,7 @@ class PacManGame:
         :return: True if a power pallet is eaten, otherwise False.
         """
         if self.grid[grid_y][grid_x] == 3:
-            self.grid[grid_y][grid_x] = 0  # Removes the Power Pellet from the grid
+            self.grid[grid_y][grid_x] = 4  # Removes the Power Pellet from the grid and now Pac-Man (4) is there
             self.power_mode = True
             self.power_mode_timer = 300
             for ghost in self.ghosts:
@@ -146,6 +178,7 @@ class PacManGame:
         for ghost in self.ghosts:
             if (ghost.position.x, ghost.position.y) == (x, y):
                 if self.power_mode and not ghost.is_eaten:
+                    self.grid[int(y // 16)][int(x // 16)] = 4  # Encodes Pac-Man position
                     ghost.eaten()
                     return True, game_over
                 elif not self.power_mode:
@@ -198,7 +231,7 @@ class PacManGame:
 
         if eaten_ghost:
             time_left = self.power_mode_timer
-            reward += 200 + 10 * time_left  # More valuable the sooner the ghost is eaten after power pellet
+            reward += 100  # More valuable the sooner the ghost is eaten after power pellet
             self.score += 100
 
         if self.too_close_to_ghost():
@@ -209,13 +242,13 @@ class PacManGame:
 
         if self.power_mode:
             nearest_ghost_distance = min(self.distance_to_ghost(ghost) for ghost in self.ghosts)
-            if nearest_ghost_distance > 100:  # too far from any ghost
-                reward -= 2 * (nearest_ghost_distance // 100)  # Penalize for being too far from any ghost
+            if nearest_ghost_distance > 32:  # too far from any ghost
+                reward -= 2 + (nearest_ghost_distance // 100)  # Penalize for being too far from any ghost
             else:
-                reward += 10 - (nearest_ghost_distance // 10)  # Reward for getting closer to a ghost
+                reward += 5 + (nearest_ghost_distance // 10)  # Reward for getting closer to a ghost
 
         if game_over:
-            reward -= 400
+            reward -= 200
             if self.lives == 0:
                 reward += self.score // 2
 
@@ -235,17 +268,20 @@ class PacManGame:
         :param action: The action to be taken, represented by the Direction enum.
         :return: A tuple containing the new game state as a numpy array, the reward as an integer, and a boolean indicating if the game is over.
         """
-        new_x, new_y = self.player_pos.x, self.player_pos.y
+        old_x, old_y = self.player_pos.x, self.player_pos.y
         hit_wall = False
-
         if action == Direction.UP:
-            new_y -= 16
+            new_y = old_y - 16
+            new_x = old_x
         elif action == Direction.DOWN:
-            new_y += 16
+            new_y = old_y + 16
+            new_x = old_x
         elif action == Direction.LEFT:
-            new_x -= 16
+            new_x = old_x - 16
+            new_y = old_y
         elif action == Direction.RIGHT:
-            new_x += 16
+            new_x = old_x + 16
+            new_y = old_y
 
         # Handle tunnel transitions
         if new_x < 0:  # Exiting left side
@@ -254,11 +290,14 @@ class PacManGame:
             new_x = 0  # Wrap to the left side
 
         # Check if the new position is a wall
-        # Check if the new position is a wall
         if self.grid[int(new_y // 16)][int(new_x // 16)] == 1:
+            self.grid[int(old_y // 16)][int(old_x // 16)] = 4
             hit_wall = True
         else:
+            self.grid[int(old_y // 16)][int(old_x // 16)] = 0  # Clear old Pac-Man position
             self.player_pos = Point(new_x, new_y)
+            if self.grid[int(new_y // 16)][int(new_x // 16)] == 0:
+                self.grid[int(new_y // 16)][int(new_x // 16)] = 4
 
         reward, done = self.check_collision(hit_wall)
         return (self.grid.copy(), reward, done)
@@ -392,40 +431,49 @@ class PacManGame:
                     self.running = False
 
             self.update_power_mode()
-
+            for ghost in self.ghosts:
+                self.grid = ghost.update(self.grid, self.player_pos)  # Update ghosts based on their movement delay
             if self.enable_ai:
                 state = np.array(self.grid).flatten()  # Make sure this is done every time state is updated
                 state = torch.from_numpy(state).float().unsqueeze(0)  # Adding batch dimension
                 action = self.agent.select_action(state)
-                # print(f"Action chosen by AI: {self.map_action_to_direction(action.item())}")  # Log the action chosen by AI
                 next_state, reward, done = self.step(self.map_action_to_direction(action.item()))
-                self.agent.remember(state, action, next_state, reward, done, self.score, self.highest_score)  # Store the transition in memory
+                if not self.test_mode:
+                    # Training mode: remember and learn
+                    self.agent.remember(state, action, next_state, reward, done, self.score, self.highest_score)
+                    loss = self.agent.optimize_model(64)  # Perform optimization step
+                    if loss is not None:
+                        self.total_losses.append(loss)
+                current_reward += reward
+                episode_length += 1
+                if done:
+                    self.lives -= 1
+                    if self.lives > 0:
+                        print(f"Lost a life, {self.lives} remaining")
+                        self.reset()
+                    else:
+                        self.total_rewards.append(current_reward)
+                        self.episode_lengths.append(episode_length)
+                        loss = self.agent.optimize_model(64)  # Perform one step of the optimization (on the target network)
+                        if loss is not None:
+                            self.total_losses.append(loss)
+                        print(f"Episode finished with reward: {current_reward}, Loss: {loss}, Score: {self.score}")
+                        current_reward = 0
+                        episode_length = 0
+                        self.reset()
+
             else:
                 action = self.handle_keys()
                 next_state, reward, done = self.step(action)
-
-            if not done:
-                current_reward += reward
-                episode_length += 1
-            else:
-
-                self.lives -= 1
-                if self.lives > 0:
-                    print(f"Lost a life, {self.lives} remaining")
-                    self.reset()
-                else:
-                    self.total_rewards.append(current_reward)
-                    self.episode_lengths.append(episode_length)
-                    loss = self.agent.optimize_model(64)  # Perform one step of the optimization (on the target network)
-                    if loss is not None:
-                        self.total_losses.append(loss)
-                    print(f"Episode finished with reward: {current_reward}, Loss: {loss}, Score: {self.score}")
-                    current_reward = 0
-                    episode_length = 0
-                    self.reset()
-
-            for ghost in self.ghosts:
-                ghost.update(self.grid, self.player_pos)  # Update ghosts based on their movement delay
+                if done:
+                    self.lives -= 1
+                    if self.lives > 0:
+                        print(f"Lost a life, {self.lives} remaining")
+                        self.reset()
+                    else:
+                        current_reward = 0
+                        episode_length = 0
+                        self.reset()
 
             self.render()
             self.clock.tick(20)  # Maintain 20 FPS
@@ -468,4 +516,7 @@ class PacManGame:
 if __name__ == "__main__":
     game = PacManGame()
     game.run()
-    game.plot_progress()
+    if game.enable_ai and not game.test_mode:
+        game.plot_progress()
+        game.save_model()
+
