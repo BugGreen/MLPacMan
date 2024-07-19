@@ -76,7 +76,7 @@ class PacManGame:
         self.model.eval()  # Set the model to evaluation mode
         print(f"Model loaded from {filename}")
 
-    def save_model(self, filename: str = 'pacman_model_2.pth') -> None:
+    def save_model(self, filename: str = 'pacman_D1N_batch.pth') -> None:
         """
         Save the model's state dictionary to a file.
         :param filename: The filename where the model should be saved.

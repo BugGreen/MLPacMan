@@ -5,13 +5,13 @@ import torch.nn as nn
 from collections import deque
 from typing import List, Tuple
 from encoders import Transition
-from ExplorationStrategy import EpsilonGreedy, GeneticAlgorithm
+from ExplorationStrategy import EpsilonGreedy
 
 
 
 class PacmanAgent:
     def __init__(self, model: nn.Module, optimizer: torch.optim.Optimizer, loss_fn: nn.modules.loss,
-                 action_space: int, strategy: [EpsilonGreedy, GeneticAlgorithm], gamma: float = 0.66):
+                 action_space: int, strategy: EpsilonGreedy, gamma: float = 0.66):
         """
         Initialize the PacmanAgent with a model, optimizer, and specified parameters.
 
@@ -31,6 +31,7 @@ class PacmanAgent:
         self.long_memory = deque(maxlen=10000)  # Long-term memory
         self.steps_done = 0
         self.strategy = strategy
+        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=100, gamma=0.95)
 
     def select_action(self, state: torch.Tensor) -> torch.Tensor:
         """
@@ -108,5 +109,8 @@ class PacmanAgent:
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)  # Gradient clipping
         self.optimizer.step()
+        self.scheduler.step()  # Update the learning rate based on the scheduler
+
         return loss.item()
