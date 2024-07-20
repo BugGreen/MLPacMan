@@ -72,47 +72,56 @@ class PacManGame:
 
     def show_menu(self) -> None:
         """
-        Display the main menu and handle user selection for game modes.
-        Users can select to train the AI, test the AI, or play the game manually.
+        Display the main menu with enhanced visuals and handle user selection for game modes.
+        Users can select to train the AI, test the AI, or play the game manually using up and down arrows.
         """
         menu = True
-        title_font = pygame.font.Font(None, 48)
-        option_font = pygame.font.Font(None, 36)
+        background_image = pygame.image.load('backgrounds/background.jpg')
+        title_font = pygame.font.Font('fonts/ARCADE_N.TTF', 48)
+        option_font = pygame.font.Font('fonts/ARCADE_I.TTF', 36)
 
-        title = title_font.render("Pac-Man Menu", True, (255, 255, 255))
-        train_text = option_font.render("1. Play Game", True, (255, 255, 255))
-        test_text = option_font.render("2. Train AI", True, (255, 255, 255))
-        play_text = option_font.render("3. Test AI", True, (255, 255, 255))
-
-        title_rect = title.get_rect(center=(self.w / 2, 100))
-        train_rect = train_text.get_rect(center=(self.w / 2, 200))
-        test_rect = test_text.get_rect(center=(self.w / 2, 250))
-        play_rect = play_text.get_rect(center=(self.w / 2, 300))
+        title = title_font.render("MLPacMan", True, (255, 215, 0))  # Golden color for title
+        options = ["Play Game", "Train AI", "Test AI"]
+        current_selection = 0  # Index of the current selected option
 
         while menu:
+            self.screen.blit(background_image, (0, 0))
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_1:
-                        self.enable_ai = False
-                        self.test_mode = False
-                        menu = False
-                    elif event.key == pygame.K_2:
-                        self.enable_ai = True
-                        self.test_mode = False
-                        menu = False
-                    elif event.key == pygame.K_3:
-                        self.enable_ai = True
-                        self.test_mode = True
-                        menu = False
+                    if event.key == pygame.K_DOWN:
+                        current_selection = (current_selection + 1) % len(options)
+                    elif event.key == pygame.K_UP:
+                        current_selection = (current_selection - 1) % len(options)
+                    elif event.key == pygame.K_RETURN:
+                        if current_selection == 0:
+                            self.enable_ai = False
+                            self.test_mode = False
+                            menu = False
+                        elif current_selection == 1:
+                            self.enable_ai = True
+                            self.test_mode = False
+                            menu = False
+                        elif current_selection == 2:
+                            self.enable_ai = True
+                            self.test_mode = True
+                            menu = False
 
-            self.screen.fill((0, 0, 0))
-            self.screen.blit(title, title_rect)
-            self.screen.blit(train_text, train_rect)
-            self.screen.blit(test_text, test_rect)
-            self.screen.blit(play_text, play_rect)
+            text_rect = title.get_rect(center=(self.w / 2, 150))
+            self.screen.blit(title, text_rect)
+            for idx, text in enumerate(options):
+                color = (180, 180, 180) if idx != current_selection else (255, 255, 0)
+                option_text = option_font.render(text, True, color)
+                text_rect = option_text.get_rect(center=(self.w / 2, 300 + idx * 50))
+                self.screen.blit(option_text, text_rect)
+                if idx == current_selection:
+                    # Draw arrow next to the selected item
+                    arrow_text = option_font.render(">", True, (255, 255, 0))
+                    arrow_rect = arrow_text.get_rect(right=text_rect.left - 10, centery=text_rect.centery)
+                    self.screen.blit(arrow_text, arrow_rect)
+
             pygame.display.flip()
             self.clock.tick(15)
             self.init_game()
@@ -272,25 +281,23 @@ class PacManGame:
             self.score += 1
 
         if eaten_power_pallet:
-            # More valuable if more ghosts are close
-            close_ghosts = sum(1 for ghost in self.ghosts if self.distance_to_ghost(ghost) < 32)
-            reward += 3 + 2 * close_ghosts
+            reward += 3
             self.score += 3
 
         if eaten_ghost:
-            reward += 10  # More valuable the sooner the ghost is eaten after power pellet
+            reward += 10
             self.score += 10
 
         if self.too_close_to_ghost():
             if not self.power_mode:
-                reward -= 5  # Penalty for being too close to a ghost when not in power mode
+                reward -= 3  # Penalty for being too close to a ghost when not in power mode
             else:
                 reward += 5
 
         if self.power_mode:
             nearest_ghost_distance = min(self.distance_to_ghost(ghost) for ghost in self.ghosts)
-            if nearest_ghost_distance < 32:
-                reward += 5 + (nearest_ghost_distance // 10)  # Reward for getting closer to a ghost
+            if nearest_ghost_distance <= 16:
+                reward += 3
 
         if game_over:
             reward -= 50
