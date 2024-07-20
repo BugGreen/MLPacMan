@@ -62,7 +62,7 @@ class PacmanAgent:
             self.short_memory.append((state, action, next_state, reward))
 
         # Criteria to move to long-term memory
-        if score >= 500 and score >= .85 * highest_score:
+        if score >= 50 and score >= .85 * highest_score:
             self.long_memory.append((state, action, next_state, reward))
 
     def optimize_model(self, batch_size: int):

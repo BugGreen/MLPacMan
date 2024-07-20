@@ -41,7 +41,10 @@ class EpsilonGreedy:
 
         if sample > eps_threshold:
             with torch.no_grad():
-                return model(state).max(1)[1].view(1, 1)
+                # Ensure 'state' has a batch dimension, state should be of shape [1, num_features]
+                state = state.unsqueeze(0) if state.dim() == 1 else state
+                action = model(state).max(1)[1].view(1, 1)
+                return action
         else:
             return torch.tensor([[random.randrange(action_space)]], dtype=torch.long)
 

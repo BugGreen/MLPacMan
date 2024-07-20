@@ -29,9 +29,15 @@ class PacManGame:
         pygame.display.set_caption('MLPacMan')
         self.clock = pygame.time.Clock()
         self.running = True
-        self.enable_ai = enable_ai
-        self.test_mode = test_mode
-        self.model_path = model_path
+        self.enable_ai = False  # Default to false, set true in menu
+        self.test_mode = False  # Default to false, set true in menu
+        self.model_path = model_path  # Set in menu if needed
+
+    def init_game(self) -> None:
+        """
+        Initialize game components including player, ghosts, and grid setup.
+        This setup depends on whether the AI is enabled and whether it's in test mode.
+        """
         self.player_pos = Point(self.w / 2, (self.h / 2) + 64)
         self.grid = self.setup_grid()
         self.initial_dots_amount = np.sum(self.grid == 2)
@@ -51,12 +57,11 @@ class PacManGame:
                        Ghost(Point(224, 160), Point(2, 3), GhostName.PINKY, movement_delay=2),
                        Ghost(Point(224, 160), Point(2, 3), GhostName.INKY, movement_delay=2)]
 
-
         # Initialize AI Agent if enabled
         if self.enable_ai:
             if self.test_mode and self.model_path:
                 self.model, self.optimizer, self.loss_fn = init_model(np.prod(self.grid.shape), 4)
-                self.load_model(model_path)
+                self.load_model(self.model_path)
                 self.strategy = None  # No strategy required for testing
             else:
                 input_dim = np.prod(self.grid.shape)  # Assuming a flattened grid as input
@@ -65,7 +70,54 @@ class PacManGame:
                 self.model, self.optimizer, self.loss_fn = init_model(input_dim, output_dim)
                 self.agent = PacmanAgent(self.model, self.optimizer, self.loss_fn, output_dim, strategy)
 
-    def load_model(self, filename: str = 'pacman_model.pth') -> None:
+    def show_menu(self) -> None:
+        """
+        Display the main menu and handle user selection for game modes.
+        Users can select to train the AI, test the AI, or play the game manually.
+        """
+        menu = True
+        title_font = pygame.font.Font(None, 48)
+        option_font = pygame.font.Font(None, 36)
+
+        title = title_font.render("Pac-Man Menu", True, (255, 255, 255))
+        train_text = option_font.render("1. Play Game", True, (255, 255, 255))
+        test_text = option_font.render("2. Train AI", True, (255, 255, 255))
+        play_text = option_font.render("3. Test AI", True, (255, 255, 255))
+
+        title_rect = title.get_rect(center=(self.w / 2, 100))
+        train_rect = train_text.get_rect(center=(self.w / 2, 200))
+        test_rect = test_text.get_rect(center=(self.w / 2, 250))
+        play_rect = play_text.get_rect(center=(self.w / 2, 300))
+
+        while menu:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_1:
+                        self.enable_ai = False
+                        self.test_mode = False
+                        menu = False
+                    elif event.key == pygame.K_2:
+                        self.enable_ai = True
+                        self.test_mode = False
+                        menu = False
+                    elif event.key == pygame.K_3:
+                        self.enable_ai = True
+                        self.test_mode = True
+                        menu = False
+
+            self.screen.fill((0, 0, 0))
+            self.screen.blit(title, title_rect)
+            self.screen.blit(train_text, train_rect)
+            self.screen.blit(test_text, test_rect)
+            self.screen.blit(play_text, play_rect)
+            pygame.display.flip()
+            self.clock.tick(15)
+            self.init_game()
+
+    def load_model(self, filename: str = 'pacman_D1N_batch.pth') -> None:
         """
         Load a model's state dictionary from a file.
 
@@ -76,7 +128,7 @@ class PacManGame:
         self.model.eval()  # Set the model to evaluation mode
         print(f"Model loaded from {filename}")
 
-    def save_model(self, filename: str = 'pacman_D1N_batch.pth') -> None:
+    def save_model(self, filename: str = 'pacman_DQN_3_menu.pth') -> None:
         """
         Save the model's state dictionary to a file.
         :param filename: The filename where the model should be saved.
@@ -92,11 +144,12 @@ class PacManGame:
         'X' for walls,
         'P' for power pellets,
         'T' for tunnel entries.
+        'G' for ghost walls
 
         :return: A numpy array representing the game grid.
         """
 
-        grid_map = training_grid_map if self.enable_ai and not self.test_mode else normal_grid_map
+        grid_map = training_grid_map if self.enable_ai and not self.test_mode else training_grid_map
 
         grid_map = grid_map.strip().split('\n')
         grid_map = [striped_line.lstrip(' ') for striped_line in grid_map]
@@ -107,7 +160,7 @@ class PacManGame:
         grid = np.zeros((36, 28), dtype=int)
 
         # Mapping characters to grid values
-        translate = {' ': 2, 'X': 1, 'P': 3, 'T': 0}
+        translate = {' ': 2, 'X': 1, 'P': 3, 'T': 0, 'G': -1}
 
         for y, line in enumerate(grid_map):
             for x, char in enumerate(line):
@@ -193,7 +246,7 @@ class PacManGame:
         :return: True if too close to any ghost, otherwise False.
         """
         for ghost in self.ghosts:
-            if abs(ghost.position.x - self.player_pos.x) < 16 and abs(ghost.position.y - self.player_pos.y) < 16:
+            if abs(ghost.position.x - self.player_pos.x) < 32 and abs(ghost.position.y - self.player_pos.y) < 32:
                 return True
         return False
 
@@ -210,45 +263,37 @@ class PacManGame:
         :return: The calculated reward as an integer.
         """
         reward = 0
-        if hit_wall:
-            reward -= 1  # Negative reward for hitting a wall
 
         if eaten_dot:
             # Increase reward as fewer dots remain
             remaining_dots = np.sum(self.grid == 2)
-            dot_value = 10 + (self.initial_dots_amount - remaining_dots) // 10
-            self.consecutive_dots_eaten += 1  # Increment for each dot eaten consecutively
-            reward += (dot_value * self.consecutive_dots_eaten)
-            self.score += 10
-        else:
-            self.consecutive_dots_eaten = 0
+            dot_value = 1 + (self.initial_dots_amount - remaining_dots) // 10
+            reward += dot_value
+            self.score += 1
 
         if eaten_power_pallet:
             # More valuable if more ghosts are close
             close_ghosts = sum(1 for ghost in self.ghosts if self.distance_to_ghost(ghost) < 32)
-            reward += 100 + 20 * close_ghosts
-            self.score += 50
+            reward += 3 + 2 * close_ghosts
+            self.score += 3
 
         if eaten_ghost:
-            time_left = self.power_mode_timer
-            reward += 100  # More valuable the sooner the ghost is eaten after power pellet
-            self.score += 100
+            reward += 10  # More valuable the sooner the ghost is eaten after power pellet
+            self.score += 10
 
         if self.too_close_to_ghost():
             if not self.power_mode:
-                reward -= 30  # Penalty for being too close to a ghost when not in power mode
+                reward -= 5  # Penalty for being too close to a ghost when not in power mode
             else:
-                reward += 3
+                reward += 5
 
         if self.power_mode:
             nearest_ghost_distance = min(self.distance_to_ghost(ghost) for ghost in self.ghosts)
-            if nearest_ghost_distance > 32:  # too far from any ghost
-                reward -= 2 + (nearest_ghost_distance // 100)  # Penalize for being too far from any ghost
-            else:
+            if nearest_ghost_distance < 32:
                 reward += 5 + (nearest_ghost_distance // 10)  # Reward for getting closer to a ghost
 
         if game_over:
-            reward -= 200
+            reward -= 50
             if self.lives == 0:
                 reward += self.score // 2
 
@@ -282,15 +327,20 @@ class PacManGame:
         elif action == Direction.RIGHT:
             new_x = old_x + 16
             new_y = old_y
-
+        elif action == Direction.NO_ACTION:
+            new_x, new_y = old_x, old_y
         # Handle tunnel transitions
         if new_x < 0:  # Exiting left side
             new_x = self.w - 16  # Wrap to the right side
         elif new_x >= self.w:  # Exiting right side
             new_x = 0  # Wrap to the left side
+        elif new_y < 0:
+            new_y = self.h - 16
+        elif new_y >= self.h:
+            new_y = 0
 
         # Check if the new position is a wall
-        if self.grid[int(new_y // 16)][int(new_x // 16)] == 1:
+        if self.grid[int(new_y // 16)][int(new_x // 16)] in [-1, 1]:
             self.grid[int(old_y // 16)][int(old_x // 16)] = 4
             hit_wall = True
         else:
@@ -421,8 +471,10 @@ class PacManGame:
 
     def run(self):
         """
-        Main game loop. Handles both AI-driven and manual game play based on the enable_ai flag.
+        Main game loop that handles either AI-driven or manual gameplay based on user input from the menu.
+        The loop updates game states, processes input, and renders the game frame by frame.
         """
+        self.show_menu()  # Display the menu for mode selection
         current_reward = 0
         episode_length = 0
         while self.running:
