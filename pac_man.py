@@ -57,6 +57,27 @@ class PacManGame:
                        Ghost(Point(224, 160), Point(2, 3), GhostName.PINKY, movement_delay=2),
                        Ghost(Point(224, 160), Point(2, 3), GhostName.INKY, movement_delay=2)]
 
+        # Define desired sprite dimensions
+        sprite_size = (16, 16)  # Width and height in pixels
+
+        # Load and resize Pac-Man sprites
+        self.pacman_sprites = {}
+        for pac_man_direction in ['up', 'down', 'left', 'right']:
+            original_pacman_direction = pygame.image.load(f'sprites/{pac_man_direction}.png').convert_alpha()
+            self.pacman_sprites[pac_man_direction] = pygame.transform.scale(original_pacman_direction, sprite_size)
+
+        original_pacman = pygame.image.load('sprites/right.png').convert_alpha()  # Initial Pacman sprite
+        self.pacman_sprite = pygame.transform.scale(original_pacman, sprite_size)
+
+        # Load and resize ghost sprites
+        self.ghost_sprites = {}
+        for ghost_name in ['blinky', 'pinky', 'inky', 'clyde', 'frightened', 'eaten']:
+            original_ghost = pygame.image.load(f'sprites/{ghost_name}.png').convert_alpha()
+            self.ghost_sprites[ghost_name] = pygame.transform.scale(original_ghost, sprite_size)
+
+        # Load and resize power_pallet
+        original_power_pallet = pygame.image.load('sprites/cherry.png').convert_alpha()
+        self.power_pallet_sprite = pygame.transform.scale(original_power_pallet, sprite_size)
         # Initialize AI Agent if enabled
         if self.enable_ai:
             if self.test_mode and self.model_path:
@@ -223,9 +244,10 @@ class PacManGame:
         if self.grid[grid_y][grid_x] == 3:
             self.grid[grid_y][grid_x] = 4  # Removes the Power Pellet from the grid and now Pac-Man (4) is there
             self.power_mode = True
-            self.power_mode_timer = 300
+            self.power_mode_timer = 200
             for ghost in self.ghosts:
-                ghost.mode = GhostMode.FRIGHTENED
+                if ghost.mode is not GhostMode.SCATTER:
+                    ghost.mode = GhostMode.FRIGHTENED
             return True
         return False
 
@@ -313,6 +335,17 @@ class PacManGame:
     def distance_to_ghost(self, ghost):
         return np.sqrt((self.player_pos.x - ghost.position.x) ** 2 + (self.player_pos.y - ghost.position.y) ** 2)
 
+    def update_pacman_sprite(self, action: Direction):
+        """
+        Take an action in the game environment, update the pacman sprite based on this.
+
+        :param action: The action to be taken, represented by the Direction enum.
+        """
+
+        if action is not Direction.NO_ACTION:
+            self.pacman_sprite = self.pacman_sprites[action.name.lower()]
+
+
     def step(self, action: Direction) -> Tuple[np.ndarray, int, bool]:
         """
         Take an action in the game environment, update the game state, and handle tunnel transitions.
@@ -336,6 +369,8 @@ class PacManGame:
             new_y = old_y
         elif action == Direction.NO_ACTION:
             new_x, new_y = old_x, old_y
+
+        self.update_pacman_sprite(action)
         # Handle tunnel transitions
         if new_x < 0:  # Exiting left side
             new_x = self.w - 16  # Wrap to the right side
@@ -388,27 +423,20 @@ class PacManGame:
 
         return (reward, game_over)
 
-    def define_ghost_color(self, ghost: Ghost) -> Tuple[int]:
+    def define_ghost_sprite(self, ghost: Ghost) -> Tuple[int]:
         """
-        Set the ghost color based on the original PacMan game and power_mode.
+        Set the ghost sprite based on the original PacMan game and power_mode.
 
         :param ghost: Ghost object to identify
-        :return: RGB encoding of the ghost color
+        :return: Corresponding sprite
         """
         # Visual cues for power mode
         if self.power_mode:
-            ghost_color = (0, 255, 255)  # Cyan for frightened ghosts
+            ghost_sprite = self.ghost_sprites['frightened']  # Cyan for frightened ghosts
         else:
-            if ghost.name == GhostName.BLINKY:
-                ghost_color = RED
-            elif ghost.name == GhostName.PINKY:
-                ghost_color = LAVENDER
-            elif ghost.name == GhostName.INKY:
-                ghost_color = AQUA
-            elif ghost.name == GhostName.CLYDE:
-                ghost_color = ORANGE
+            ghost_sprite = self.ghost_sprites[ghost.name.name.lower()]
 
-        return ghost_color
+        return ghost_sprite
 
     def render(self):
         """
@@ -432,18 +460,21 @@ class PacManGame:
                 elif self.grid[y][x] == 2:
                     pygame.draw.circle(self.screen, (255, 255, 255), (x * 16 + 8, y * 16 + 8), 4)  # Dot
                 elif self.grid[y][x] == 3:
-                    pygame.draw.circle(self.screen, (51, 255, 51), (x * 16 + 8, y * 16 + 8), 6)  # Power Pellet
+                    self.screen.blit(self.power_pallet_sprite, (x * 16, y * 16))
 
         # Pac-Man
-        pygame.draw.circle(self.screen, (255, 255, 0), (self.player_pos.x + 8, self.player_pos.y + 8), 8)  # Pac-Man
+        # pygame.draw.circle(self.screen, (255, 255, 0), (self.player_pos.x + 8, self.player_pos.y + 8), 8)  # Pac-Man
+        # Render Pac-Man
+        pacman_x, pacman_y = self.player_pos.x, self.player_pos.y
+        self.screen.blit(self.pacman_sprite, (pacman_x, pacman_y))
 
         # Ghosts
         for ghost in self.ghosts:
-            if ghost.is_eaten:
-                ghost_color = (128, 128, 128)  # Grey color to indicate the ghost is eaten
+            if ghost.is_eaten or ghost.mode == ghost.mode.SCATTER:
+                ghost_sprite = self.ghost_sprites['eaten']  # Grey color to indicate the ghost is eaten
             else:
-                ghost_color = self.define_ghost_color(ghost)
-            pygame.draw.circle(self.screen, ghost_color, (ghost.position.x + 8, ghost.position.y + 8), 8)
+                ghost_sprite = self.define_ghost_sprite(ghost)
+            self.screen.blit(ghost_sprite, (ghost.position.x, ghost.position.y))
 
         # Render current score and high score
         score_text = self.font.render(f"Score: {self.score}", True, (255, 255, 255))
