@@ -7,7 +7,7 @@ from typing import Tuple
 from ghost import Ghost
 from encoders import *
 from agent import PacmanAgent
-from model import init_model
+from model import init_model, init_dueling_model
 import torch
 from ExplorationStrategy import EpsilonGreedy
 
@@ -59,10 +59,11 @@ class PacManGame:
 
         # Define desired sprite dimensions
         sprite_size = (16, 16)  # Width and height in pixels
-
+        # Possible directions
+        direction_names = ['up', 'down', 'left', 'right']
         # Load and resize Pac-Man sprites
         self.pacman_sprites = {}
-        for pac_man_direction in ['up', 'down', 'left', 'right']:
+        for pac_man_direction in direction_names:
             original_pacman_direction = pygame.image.load(f'sprites/{pac_man_direction}.png').convert_alpha()
             self.pacman_sprites[pac_man_direction] = pygame.transform.scale(original_pacman_direction, sprite_size)
 
@@ -72,8 +73,15 @@ class PacManGame:
         # Load and resize ghost sprites
         self.ghost_sprites = {}
         for ghost_name in ['blinky', 'pinky', 'inky', 'clyde', 'frightened', 'eaten']:
-            original_ghost = pygame.image.load(f'sprites/{ghost_name}.png').convert_alpha()
-            self.ghost_sprites[ghost_name] = pygame.transform.scale(original_ghost, sprite_size)
+            if ghost_name in ['frightened', 'eaten']:
+                original_ghost = pygame.image.load(f'sprites/{ghost_name}.png').convert_alpha()
+                self.ghost_sprites[ghost_name] = pygame.transform.scale(original_ghost, sprite_size)
+            else:
+                direction_sprites = {}
+                for direction in ['up', 'down', 'left', 'right', 'no_action']:
+                    original_ghost_direction = pygame.image.load(f'sprites/{ghost_name}/{direction}.png').convert_alpha()
+                    direction_sprites[direction] = pygame.transform.scale(original_ghost_direction, sprite_size)
+                self.ghost_sprites[ghost_name] = direction_sprites
 
         # Load and resize power_pallet
         original_power_pallet = pygame.image.load('sprites/cherry.png').convert_alpha()
@@ -81,14 +89,14 @@ class PacManGame:
         # Initialize AI Agent if enabled
         if self.enable_ai:
             if self.test_mode and self.model_path:
-                self.model, self.optimizer, self.loss_fn = init_model(np.prod(self.grid.shape), 4)
+                self.model, self.optimizer, self.loss_fn = init_dueling_model(np.prod(self.grid.shape), 4)
                 self.load_model(self.model_path)
                 self.strategy = None  # No strategy required for testing
             else:
                 input_dim = np.prod(self.grid.shape)  # Assuming a flattened grid as input
                 strategy = EpsilonGreedy()
                 output_dim = 4  # Four possible actions: UP, DOWN, LEFT, RIGHT
-                self.model, self.optimizer, self.loss_fn = init_model(input_dim, output_dim)
+                self.model, self.optimizer, self.loss_fn = init_dueling_model(input_dim, output_dim)
                 self.agent = PacmanAgent(self.model, self.optimizer, self.loss_fn, output_dim, strategy)
 
     def show_menu(self) -> None:
@@ -102,7 +110,7 @@ class PacManGame:
         option_font = pygame.font.Font('fonts/ARCADE_I.TTF', 36)
 
         title = title_font.render("MLPacMan", True, (255, 215, 0))  # Golden color for title
-        options = ["Play Game", "Train AI", "Test AI"]
+        options = ["Play Game", "Train AI"]
         current_selection = 0  # Index of the current selected option
 
         while menu:
@@ -158,7 +166,7 @@ class PacManGame:
         self.model.eval()  # Set the model to evaluation mode
         print(f"Model loaded from {filename}")
 
-    def save_model(self, filename: str = 'pacman_DQN_3_menu.pth') -> None:
+    def save_model(self, filename: str = 'pacman_Dueling_3_menu.pth') -> None:
         """
         Save the model's state dictionary to a file.
         :param filename: The filename where the model should be saved.
@@ -345,7 +353,6 @@ class PacManGame:
         if action is not Direction.NO_ACTION:
             self.pacman_sprite = self.pacman_sprites[action.name.lower()]
 
-
     def step(self, action: Direction) -> Tuple[np.ndarray, int, bool]:
         """
         Take an action in the game environment, update the game state, and handle tunnel transitions.
@@ -434,7 +441,7 @@ class PacManGame:
         if self.power_mode:
             ghost_sprite = self.ghost_sprites['frightened']  # Cyan for frightened ghosts
         else:
-            ghost_sprite = self.ghost_sprites[ghost.name.name.lower()]
+            ghost_sprite = self.ghost_sprites[ghost.name.name.lower()][ghost.direction.name.lower()]
 
         return ghost_sprite
 

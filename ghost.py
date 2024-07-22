@@ -108,6 +108,7 @@ class Ghost:
         new_position = self.position
         new_x, new_y = int(new_position.x // 16), int(new_position.y // 16)
         self.original_cell_value = grid[new_y][new_x]
+        self.direction = self.encode_movement([old_x, old_y], [new_x, new_y])
         grid[new_y][new_x] = 5 if self.mode is not GhostMode.FRIGHTENED else 6
         # Adjust position for tunnel transitions
         if self.position.x < 0:  # Exiting left side
@@ -116,6 +117,33 @@ class Ghost:
             self.position.x = 0  # Wrap to the left side
 
         return grid
+
+    @staticmethod
+    def encode_movement(old_position, new_position) -> Direction:
+        """
+        Encode the movement direction based on the old and new positions.
+
+        :param old_position: Tuple[int, int] - The previous coordinates of an object on the grid.
+        :param new_position: Tuple[int, int] - The new coordinates of an object on the grid.
+        :return: str - A string representing the movement direction ('up', 'down', 'left', 'right', 'same_place').
+        """
+        old_x, old_y = old_position
+        new_x, new_y = new_position
+
+        # Calculate differences
+        delta_x = new_x - old_x
+        delta_y = new_y - old_y
+
+        if delta_y < 0:  # Moved up
+            return Direction.UP
+        elif delta_y > 0:  # Moved down
+            return Direction.DOWN
+        elif delta_x < 0:  # Moved left
+            return Direction.LEFT
+        elif delta_x > 0:  # Moved right
+            return Direction.RIGHT
+        else:  # Stayed in the same place
+            return Direction.NO_ACTION
 
     def flee_from_pacman(self, grid: np.ndarray) -> Point:
         """
