@@ -89,7 +89,7 @@ class PacManGame:
         # Initialize AI Agent if enabled
         if self.enable_ai:
             if self.test_mode and self.model_path:
-                self.model, self.optimizer, self.loss_fn = init_dueling_model(np.prod(self.grid.shape), 4)
+                self.model, self.optimizer, self.loss_fn = init_model(np.prod(self.grid.shape), 4)
                 self.load_model(self.model_path)
                 self.strategy = None  # No strategy required for testing
             else:
@@ -98,6 +98,45 @@ class PacManGame:
                 output_dim = 4  # Four possible actions: UP, DOWN, LEFT, RIGHT
                 self.model, self.optimizer, self.loss_fn = init_dueling_model(input_dim, output_dim)
                 self.agent = PacmanAgent(self.model, self.optimizer, self.loss_fn, output_dim, strategy)
+
+    def show_game_over_menu(self):
+        """
+        Display the game over screen with options to play again or quit.
+        """
+        game_over = True
+        game_over_font = pygame.font.Font(None, 48)
+        score_font = pygame.font.Font(None, 36)
+
+        game_over_text = game_over_font.render("Game Over", True, (255, 0, 0))
+        score_text = score_font.render(f"Final Score: {self.score}", True, (255, 255, 255))
+        play_again_text = score_font.render("Press Enter to Play Again", True, (255, 255, 255))
+        quit_text = score_font.render("Press Esc to Quit", True, (255, 255, 255))
+
+        game_over_rect = game_over_text.get_rect(center=(self.w / 2, self.h / 3))
+        score_rect = score_text.get_rect(center=(self.w / 2, self.h / 3 + 50))
+        play_again_rect = play_again_text.get_rect(center=(self.w / 2, self.h / 3 + 100))
+        quit_rect = quit_text.get_rect(center=(self.w / 2, self.h / 3 + 150))
+
+        while game_over:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        self.reset()
+                        game_over = False
+                    elif event.key == pygame.K_ESCAPE:
+                        pygame.quit()
+                        sys.exit()
+
+            self.screen.fill((0, 0, 0))
+            self.screen.blit(game_over_text, game_over_rect)
+            self.screen.blit(score_text, score_rect)
+            self.screen.blit(play_again_text, play_again_rect)
+            self.screen.blit(quit_text, quit_rect)
+            pygame.display.flip()
+            self.clock.tick(15)
 
     def show_menu(self) -> None:
         """
@@ -110,7 +149,7 @@ class PacManGame:
         option_font = pygame.font.Font('fonts/ARCADE_I.TTF', 36)
 
         title = title_font.render("MLPacMan", True, (255, 215, 0))  # Golden color for title
-        options = ["Play Game", "Train AI"]
+        options = ["Play Game", "Train AI", "Test AI"]
         current_selection = 0  # Index of the current selected option
 
         while menu:
@@ -166,7 +205,7 @@ class PacManGame:
         self.model.eval()  # Set the model to evaluation mode
         print(f"Model loaded from {filename}")
 
-    def save_model(self, filename: str = 'pacman_Dueling_3_menu.pth') -> None:
+    def save_model(self, filename: str = 'pacman_DQN_3_menu.pth') -> None:
         """
         Save the model's state dictionary to a file.
         :param filename: The filename where the model should be saved.
@@ -570,7 +609,7 @@ class PacManGame:
                     else:
                         current_reward = 0
                         episode_length = 0
-                        self.reset()
+                        self.show_game_over_menu()
 
             self.render()
             self.clock.tick(20)  # Maintain 20 FPS
@@ -616,4 +655,5 @@ if __name__ == "__main__":
     if game.enable_ai and not game.test_mode:
         game.plot_progress()
         game.save_model()
+
 

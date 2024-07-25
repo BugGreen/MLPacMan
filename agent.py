@@ -3,10 +3,8 @@ import random
 import numpy as np
 import torch.nn as nn
 from collections import deque
-from typing import List, Tuple
 from encoders import Transition
 from ExplorationStrategy import EpsilonGreedy
-
 
 
 class PacmanAgent:
@@ -40,7 +38,7 @@ class PacmanAgent:
         :param state: The current state of the environment.
         :return: The action to take.
         """
-        if isinstance(self.strategy, EpsilonGreedy) or isinstance(self.strategy, GeneticAlgorithm):
+        if isinstance(self.strategy, EpsilonGreedy) or isinstance(self.strategy):
             return self.strategy.select_action(state, self.model, self.steps_done, self.action_space)
             self.steps_done += 1
 
