@@ -1,6 +1,5 @@
 import torch
 import random
-import numpy as np
 import torch.nn as nn
 from collections import deque
 from encoders import Transition
