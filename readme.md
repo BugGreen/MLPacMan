@@ -3,7 +3,7 @@
 ![alt text](images/GameDemo.png) 
 
 ## Project Overview
-MLPacMan is remake of the classic arcade game Pac-Man, enhanced with artificial intelligence to explore game dynamics 
+MLPacMan is a remake of the classic arcade game Pac-Man, enhanced with artificial intelligence to explore game dynamics 
 and decision-making through Deep Q-Networks (DQN) and Dueling Deep Q-Networks (Dueling DQN). This project aims to 
 demonstrate the application of reinforcement learning techniques and provide insights into human-computer interaction 
 within a controlled game environment.
