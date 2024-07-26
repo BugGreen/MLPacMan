@@ -1,4 +1,4 @@
-from encoders import Point, Direction, GhostMode, GhostName
+from src.encoders import Point, Direction, GhostMode, GhostName
 from queue import PriorityQueue
 from random import choice
 import numpy as np

@@ -4,12 +4,12 @@ import pygame
 import sys
 import numpy as np
 from typing import Tuple
-from ghost import Ghost
-from encoders import *
-from agent import PacmanAgent
-from model import init_model, init_dueling_model
+from src.ghost import Ghost
+from src.encoders import *
+from src.agent import PacmanAgent
+from src.model import init_model, init_dueling_model
 import torch
-from ExplorationStrategy import EpsilonGreedy
+from src.ExplorationStrategy import EpsilonGreedy
 
 
 class PacManGame:
@@ -205,7 +205,7 @@ class PacManGame:
         self.model.eval()  # Set the model to evaluation mode
         print(f"Model loaded from {filename}")
 
-    def save_model(self, filename: str = 'pacman_DQN_3_menu.pth') -> None:
+    def save_model(self, filename: str = 'trained_models/pacman_DQN_3_menu.pth') -> None:
         """
         Save the model's state dictionary to a file.
         :param filename: The filename where the model should be saved.

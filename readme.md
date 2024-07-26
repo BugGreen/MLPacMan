@@ -14,6 +14,7 @@ within a controlled game environment.
 - [Programming Language and Software](#programming-language-and-software)
 - [Artificial Intelligence](#artificial-intelligence)
 - [Conclusions and Future Work](#conclusions-and-future-work)
+- [Installation](#installation)
 - [Credits](#credits)
 
 ## Introduction
@@ -36,6 +37,8 @@ The game introduces complexities like power pellets and ghost strategies, provid
 
 ### Sprites and Assets
 The game utilizes detailed sprites for Pac-Man and ghosts, dynamically adjusting based on game events. These include different sprites for ghost modes and Pac-Man's directions.
+
+![alt text](images/Sprites.png)
 
 ## Programming Language and Software
 Python was selected due to the developer’s familiarity, which streamlined development and debugging. Key libraries include:

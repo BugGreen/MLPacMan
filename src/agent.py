@@ -2,8 +2,8 @@ import torch
 import random
 import torch.nn as nn
 from collections import deque
-from encoders import Transition
-from ExplorationStrategy import EpsilonGreedy
+from src.encoders import Transition
+from src.ExplorationStrategy import EpsilonGreedy
 
 
 class PacmanAgent:
